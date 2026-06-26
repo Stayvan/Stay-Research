@@ -1,0 +1,2238 @@
+//@version=5
+indicator("SN Sangam by Ayaann", overlay=true, max_lines_count=500, max_labels_count=500, max_bars_back=600)
+
+// ===================== INPUTS =====================
+grp_strat = "Strategies"
+en_gati   = input.bool(true, "Enable Gati", group=grp_strat)
+en_ojas   = input.bool(true, "Enable Ojas", group=grp_strat)
+en_akriti = input.bool(true, "Enable Akriti", group=grp_strat)
+
+grp_core = "Core"
+lookback_d   = input.int(89, "D Lookback", minval=50, group=grp_core)
+lookback_h4  = input.int(144, "H4 Lookback", minval=50, group=grp_core)
+lookback_h1  = input.int(233, "H1 Lookback", minval=50, group=grp_core)
+lookback_m15 = input.int(377, "M15 Lookback", minval=50, group=grp_core)
+lookback_m5  = input.int(455, "M5 Lookback", minval=50, group=grp_core)
+seed_pct     = input.float(10.0, "Seed %", minval=1.0, maxval=50.0, group=grp_core)
+htf_combo    = input.string("3 time frames (all)", "HTF Combo Mode", options=["3 time frames (all)", "2 time frames (any 2)"], group=grp_core)
+
+body_th   = input.float(70.0, "GCR Body %", group=grp_core)
+gcr_use_all_patterns = input.bool(true, "GCR: Use 1/2/3 Candle Patterns", group=grp_core)
+eor_limit = input.float(1.0, "EOR %", group=grp_core)
+sl_buffer = input.float(0.5, "SL Buffer %", group=grp_core) / 100.0
+use_vemar = input.bool(true, "Use VEMAR", group=grp_core)
+
+vema_fast_len = input.int(7, "VEMA Fast", minval=2, group=grp_core)
+vema_slow_len = input.int(14, "VEMA Slow", minval=3, group=grp_core)
+
+grp_ak = "Akriti Params"
+d_f   = input.int(23, "D Fractal", group=grp_ak)
+h4_f  = input.int(28, "H4 Fractal", group=grp_ak)
+h1_f  = input.int(33, "H1 Fractal", group=grp_ak)
+m15_f = input.int(27, "M15 Fractal", group=grp_ak)
+m5_f  = input.int(42, "M5 Fractal", group=grp_ak)
+ak_instant_structure_flip = input.bool(true, "Akriti: Instant Flip on Structure Break", group=grp_ak)
+
+grp_ga = "Gati Params"
+d_mult   = input.float(7.86,  "Daily ATR Mult", group=grp_ga)
+h4_mult  = input.float(8.72,  "4H ATR Mult", group=grp_ga)
+h1_mult  = input.float(9.68,  "1H ATR Mult", group=grp_ga)
+m15_mult = input.float(10.75, "15m ATR Mult", group=grp_ga)
+m5_mult  = input.float(11.93, "5m ATR Mult", group=grp_ga)
+
+grp_f_ojas = "Ojas Filters"
+ojas_use_htfafm = input.bool(true, "Use HTFAFM", group=grp_f_ojas)
+ojas_use_tfat   = input.bool(true, "Use TFAT", group=grp_f_ojas)
+ojas_use_rat    = input.bool(false, "Use RAT", group=grp_f_ojas)
+ojas_use_div    = input.bool(true, "Use DIV", group=grp_f_ojas)
+ojas_use_gcr    = input.bool(true, "Use GCR", group=grp_f_ojas)
+ojas_use_gcrrng = input.bool(true, "Use GCRRNG", group=grp_f_ojas)
+ojas_use_eor    = input.bool(true, "Use EOR", group=grp_f_ojas)
+
+grp_f_ak = "Akriti Filters"
+ak_use_htfafm = input.bool(true, "Use HTFAFM", group=grp_f_ak)
+ak_use_tfat   = input.bool(true, "Use TFAT", group=grp_f_ak)
+ak_use_rat    = input.bool(false, "Use RAT", group=grp_f_ak)
+ak_use_div    = input.bool(true, "Use DIV", group=grp_f_ak)
+ak_use_gcr    = input.bool(true, "Use GCR", group=grp_f_ak)
+ak_use_gcrrng = input.bool(true, "Use GCRRNG", group=grp_f_ak)
+ak_use_eor    = input.bool(true, "Use EOR", group=grp_f_ak)
+
+grp_f_ga = "Gati Filters"
+ga_use_htfafm = input.bool(true, "Use HTFAFM", group=grp_f_ga)
+ga_use_tfat   = input.bool(true, "Use TFAT", group=grp_f_ga)
+ga_use_rat    = input.bool(false, "Use RAT", group=grp_f_ga)
+ga_use_div    = input.bool(true, "Use DIV", group=grp_f_ga)
+ga_use_gcr    = input.bool(true, "Use GCR", group=grp_f_ga)
+ga_use_gcrrng = input.bool(true, "Use GCRRNG", group=grp_f_ga)
+ga_use_eor    = input.bool(true, "Use EOR", group=grp_f_ga)
+
+grp_plot = "Plot Controls"
+show_zz_ojas   = input.bool(true, "Show Ojas ZigZag", group=grp_plot)
+show_zz_akriti = input.bool(true, "Show Akriti ZigZag", group=grp_plot)
+show_zz_gati   = input.bool(true, "Show Gati ZigZag", group=grp_plot)
+plot_max_points = input.int(10, "Maximum ZigZag Points", minval=2, maxval=50, group=grp_plot)
+
+// ===================== SLOR / POSITION SIZING =====================
+grp_slor = "SLOR / Position Sizing"
+use_slor = input.bool(true, "Use SLOR", group=grp_slor)
+equity_sl_amount = input.float(13594.0, "Equity Max SL Rs", minval=1.0, group=grp_slor)
+fno_sl_amount = input.float(27188.0, "FNO Max SL Rs", minval=1.0, group=grp_slor)
+fno_lot_size = input.float(0.0, "Manual FNO Lot Size (0 = Auto)", minval=0.0, group=grp_slor)
+instrument_mode = input.string("Auto", "Instrument Mode", options=["Auto", "Equity", "Futures/Options"], group=grp_slor)
+equity_lot_value_min = input.float(270788.0, "Equity Lot Value Min", minval=1.0, group=grp_slor)
+equity_lot_value_max = input.float(290363.0, "Equity Lot Value Max / Qty Recalc Base", minval=1.0, group=grp_slor)
+
+// ===================== MOVE DEBUG TOGGLES (ADD UNDER grp_plot INPUTS) =====================
+show_moves_gati   = input.bool(false, "Show Gati 5TF Moves", group=grp_plot)
+show_moves_ojas   = input.bool(false, "Show Ojas 5TF Moves", group=grp_plot)
+show_moves_akriti = input.bool(false, "Show Akriti 5TF Moves", group=grp_plot)
+
+// ===================== ENGINES =====================
+bear_good(off) =>
+    rng = high[off] - low[off]
+    body = math.abs(close[off] - open[off])
+    rng > 0 and close[off] < open[off] and (body / rng * 100.0 >= 70)
+
+bull_good(off) =>
+    rng = high[off] - low[off]
+    body = math.abs(close[off] - open[off])
+    rng > 0 and close[off] > open[off] and (body / rng * 100.0 >= 70)
+
+rat_logic() =>
+    string out = "None"
+    if close > close[1] and close[1] > close[2] and close[2] > close[3]
+        out := "EPR"
+    else if close < close[1] and close[1] < close[2] and close[2] < close[3]
+        out := "ENR"
+    out
+
+gcr_engine(th) =>
+    rng = high - low
+    body = math.abs(close - open)
+    upper = high - math.max(open, close)
+    lower = math.min(open, close) - low
+    prev_rng = high[1] - low[1]
+    prev_body = math.abs(close[1] - open[1])
+    prev2_rng = high[2] - low[2]
+    prev2_body = math.abs(close[2] - open[2])
+    is_small_body = rng > 0 and body / rng <= 0.3
+    is_prev_small_body = prev_rng > 0 and prev_body / prev_rng <= 0.3
+
+    body_pct_ok = rng > 0 and (body / rng * 100.0 >= th)
+    bull_engulf = close > open and close[1] < open[1] and open <= close[1] and close >= open[1]
+    bear_engulf = close < open and close[1] > open[1] and open >= close[1] and close <= open[1]
+
+    // 1-candle bullish patterns
+    bull_hammer = close > open and lower >= body * 2 and upper <= body * 0.5
+    bull_inv_hammer = close > open and upper >= body * 2 and lower <= body * 0.5
+    bull_marubozu = close > open and rng > 0 and upper <= rng * 0.1 and lower <= rng * 0.1
+    bull_long_body = close > open and body_pct_ok
+
+    // 1-candle bearish patterns
+    bear_hanging = close < open and lower >= body * 2 and upper <= body * 0.5
+    bear_shooting = close < open and upper >= body * 2 and lower <= body * 0.5
+    bear_marubozu = close < open and rng > 0 and upper <= rng * 0.1 and lower <= rng * 0.1
+    bear_long_body = close < open and body_pct_ok
+
+    // 2-candle bullish patterns
+    bull_piercing = close[1] < open[1] and close > open and open < close[1] and close > (open[1] + close[1]) / 2 and close < open[1]
+    bull_harami = close[1] < open[1] and close > open and open >= close[1] and close <= open[1]
+    bull_harami_cross = close[1] < open[1] and is_small_body and open >= close[1] and close <= open[1]
+    bull_tweezer_bottom = close > open and close[1] < open[1] and math.abs(low - low[1]) <= ta.atr(14) * 0.1
+
+    // 2-candle bearish patterns
+    bear_dark_cloud = close[1] > open[1] and close < open and open > close[1] and close < (open[1] + close[1]) / 2 and close > open[1]
+    bear_harami = close[1] > open[1] and close < open and open <= close[1] and close >= open[1]
+    bear_harami_cross = close[1] > open[1] and is_small_body and open <= close[1] and close >= open[1]
+    bear_tweezer_top = close < open and close[1] > open[1] and math.abs(high - high[1]) <= ta.atr(14) * 0.1
+
+    // 3-candle bullish patterns
+    bull_morning_star = close[2] < open[2] and prev2_body > prev2_rng * 0.5 and is_prev_small_body and close > open and close >= (open[2] + close[2]) / 2
+    bull_three_soldiers = close > open and close[1] > open[1] and close[2] > open[2] and close > close[1] and close[1] > close[2]
+    bull_three_inside_up = close[2] < open[2] and close[1] > open[1] and open[1] >= close[2] and close[1] <= open[2] and close > open[2]
+    bull_three_outside_up = close[2] < open[2] and close[1] > open[1] and open[1] <= close[2] and close[1] >= open[2] and close > close[1]
+
+    // 3-candle bearish patterns
+    bear_evening_star = close[2] > open[2] and prev2_body > prev2_rng * 0.5 and is_prev_small_body and close < open and close <= (open[2] + close[2]) / 2
+    bear_three_crows = close < open and close[1] < open[1] and close[2] < open[2] and close < close[1] and close[1] < close[2]
+    bear_three_inside_down = close[2] > open[2] and close[1] < open[1] and open[1] <= close[2] and close[1] >= open[2] and close < open[2]
+    bear_three_outside_down = close[2] > open[2] and close[1] < open[1] and open[1] >= close[2] and close[1] <= open[2] and close < close[1]
+
+    bull_patterns = bull_marubozu or bull_morning_star or bull_three_soldiers or bull_three_inside_up or bull_three_outside_up
+    bear_patterns = bear_marubozu or bear_evening_star or bear_three_crows or bear_three_inside_down or bear_three_outside_down
+
+    bull_sig = gcr_use_all_patterns ? (bull_long_body or bull_engulf or bull_patterns) : (bull_long_body or bull_engulf)
+    bear_sig = gcr_use_all_patterns ? (bear_long_body or bear_engulf or bear_patterns) : (bear_long_body or bear_engulf)
+
+    is_gcr = bull_sig or bear_sig
+
+    g_h = ta.valuewhen(is_gcr, high, 0)
+    g_l = ta.valuewhen(is_gcr, low, 0)
+    g_idx = ta.valuewhen(is_gcr, bar_index, 0)
+    has_gcr = not na(g_h) and not na(g_l) and not na(g_idx)
+    bool v_broken = false
+    if has_gcr
+        lb = math.max(1, bar_index - g_idx + 1)
+        v_broken := ta.highest(high, lb) > g_h or ta.lowest(low, lb) < g_l
+    [g_h, g_l, has_gcr ? 1.0 : 0.0, has_gcr and not v_broken ? 1.0 : 0.0, bull_sig ? 1.0 : 0.0, bear_sig ? 1.0 : 0.0]
+
+niti_logic(f_period) =>
+    rsi_val = ta.rsi(close, 14)
+    isFH = high[f_period] == ta.highest(high, f_period * 2 + 1)
+    isFL = low[f_period] == ta.lowest(low, f_period * 2 + 1)
+    var float lastFH = na
+    var float lastRSI_FH = na
+    var bool hasBearReset = false
+    var float lastFL = na
+    var float lastRSI_FL = na
+    var bool hasBullReset = false
+    if isFH
+        lastFH := high[f_period]
+        lastRSI_FH := rsi_val[f_period]
+        hasBearReset := false
+    if rsi_val >= 30
+        hasBearReset := true
+    if isFL
+        lastFL := low[f_period]
+        lastRSI_FL := rsi_val[f_period]
+        hasBullReset := false
+    if rsi_val <= 70
+        hasBullReset := true
+    neg = not na(lastFH) and not na(lastRSI_FH) and close > lastFH and rsi_val < lastRSI_FH and not hasBearReset
+    pos = not na(lastFL) and not na(lastRSI_FL) and close < lastFL and rsi_val > lastRSI_FL and not hasBullReset
+    neg ? "NEG" : pos ? "POS" : "Neut"
+
+f_move_from_pivots(float y1, int t1, bool has1,
+                   float y2, int t2, bool has2,
+                   float y3, int t3, bool has3,
+                   bool fallbackLatestIsHigh) =>
+    string mv = "Down"
+
+    if has3
+        // Primary: interpret by alternating pivot types first.
+        // H-L-H: lower-high => Down, higher-high => Up
+        if t1 == 1 and t2 == -1 and t3 == 1
+            if y1 < y3
+                mv := "Down"
+            else if y1 > y3
+                mv := "Up"
+            else
+                mv := y2 < y3 ? "Down" : "Up"
+
+        // L-H-L: higher-low => Up, lower-low => Down
+        else if t1 == -1 and t2 == 1 and t3 == -1
+            if y1 > y3
+                mv := "Up"
+            else if y1 < y3
+                mv := "Down"
+            else
+                mv := y2 > y3 ? "Up" : "Down"
+
+        // Fallback to your previous generic geometry
+        else
+            up_case_1 = y1 > y2 and y1 > y3
+            up_case_2 = y1 < y2 and y1 > y3 and y2 > y3
+            dn_case_1 = y1 < y2 and y1 < y3
+            dn_case_2 = y1 < y2 and y3 < y2
+
+            if up_case_1 or up_case_2
+                mv := "Up"
+            else if dn_case_1 or dn_case_2
+                mv := "Down"
+            else
+                mv := t1 == 1 ? "Up" : "Down"
+
+    else if has2
+        if t1 == 1 and t2 == -1
+            mv := "Up"
+        else if t1 == -1 and t2 == 1
+            mv := "Down"
+        else
+            mv := y1 >= y2 ? "Up" : "Down"
+
+    else
+        mv := fallbackLatestIsHigh ? "Up" : "Down"
+
+    mv
+
+trend_engine(lb) =>
+    eff_lb = math.max(2, math.min(lb, bar_index + 1))
+    seed_len = math.max(1, int(math.round(eff_lb * seed_pct / 100.0)))
+    scan_from = math.max(0, eff_lb - seed_len - 1)
+
+    float sh = na
+    float sl = na
+    int shx = na
+    int slx = na
+
+    for i = eff_lb - seed_len to eff_lb - 1
+        if na(sh) or high[i] > sh
+            sh := high[i]
+            shx := bar_index - i
+        if na(sl) or low[i] < sl
+            sl := low[i]
+            slx := bar_index - i
+
+    float p0 = shx <= slx ? sh : sl
+    int p0t = shx <= slx ? 1 : -1
+    float p1 = shx <= slx ? sl : sh
+    int p1t = shx <= slx ? -1 : 1
+    int p1x = shx <= slx ? slx : shx
+
+    float[] py = array.new_float()
+    int[] pt = array.new_int()
+    int[] px = array.new_int()
+    array.push(py, p0), array.push(pt, p0t), array.push(px, shx <= slx ? shx : slx)
+    array.push(py, p1), array.push(pt, p1t), array.push(px, p1x)
+
+    float lastConfirmedTop = p0t == 1 ? p0 : p1t == 1 ? p1 : na
+    float lastConfirmedBottom = p0t == -1 ? p0 : p1t == -1 ? p1 : na
+
+    int oppRun = 0
+    int oppGoodStreak = 0
+    int barsFromExtreme = 0
+
+    for off = scan_from to 0
+        xCur = bar_index - off
+        hCur = high[off]
+        lCur = low[off]
+        n = array.size(py)
+        curY = array.get(py, n - 1)
+        curT = array.get(pt, n - 1)
+        curX = array.get(px, n - 1)
+
+        if xCur > curX
+            if curT == 1
+                if hCur > curY
+                    array.set(py, n - 1, hCur), array.set(px, n - 1, xCur)
+                    oppRun := 0, oppGoodStreak := 0, barsFromExtreme := 0
+                else
+                    barsFromExtreme += 1
+                    isOpp = close[off] < open[off]
+                    if isOpp
+                        oppRun += 1
+                        oppGoodStreak := bear_good(off) ? oppGoodStreak + 1 : 0
+                    else
+                        oppRun := 0, oppGoodStreak := 0
+                    brokeStructure = not na(lastConfirmedBottom) and lCur < lastConfirmedBottom
+                    strictOpp = barsFromExtreme <= 2 and oppRun >= 2 and oppGoodStreak >= 2
+                    if brokeStructure or strictOpp
+                        lastConfirmedTop := curY
+                        array.push(py, lCur), array.push(pt, -1), array.push(px, xCur)
+                        oppRun := 0, oppGoodStreak := 0
+            else
+                if lCur < curY
+                    array.set(py, n - 1, lCur), array.set(px, n - 1, xCur)
+                    oppRun := 0, oppGoodStreak := 0, barsFromExtreme := 0
+                else
+                    barsFromExtreme += 1
+                    isOpp = close[off] > open[off]
+                    if isOpp
+                        oppRun += 1
+                        oppGoodStreak := bull_good(off) ? oppGoodStreak + 1 : 0
+                    else
+                        oppRun := 0, oppGoodStreak := 0
+                    brokeStructure = not na(lastConfirmedTop) and hCur > lastConfirmedTop
+                    strictOpp = barsFromExtreme <= 2 and oppRun >= 2 and oppGoodStreak >= 2
+                    if brokeStructure or strictOpp
+                        lastConfirmedBottom := curY
+                        array.push(py, hCur), array.push(pt, 1), array.push(px, xCur)
+                        oppRun := 0, oppGoodStreak := 0
+
+    n2 = array.size(py)
+    y1 = n2 >= 1 ? array.get(py, n2 - 1) : na
+    t1 = n2 >= 1 ? array.get(pt, n2 - 1) : 0
+    y2 = n2 >= 2 ? array.get(py, n2 - 2) : na
+    t2 = n2 >= 2 ? array.get(pt, n2 - 2) : 0
+    y3 = n2 >= 3 ? array.get(py, n2 - 3) : na
+    t3 = n2 >= 3 ? array.get(pt, n2 - 3) : 0
+
+    fallbackLatestIsHigh = shx <= slx
+    f_move_from_pivots(y1, t1, n2 >= 1, y2, t2, n2 >= 2, y3, t3, n2 >= 3, fallbackLatestIsHigh)
+
+//OJAS
+move_start_engine(lb) =>
+    eff_lb = math.max(2, math.min(lb, bar_index + 1))
+    seed_len = math.max(1, int(math.round(eff_lb * seed_pct / 100.0)))
+    scan_from = math.max(0, eff_lb - seed_len - 1)
+
+    float sh = na
+    float sl = na
+    int shx = na
+    int slx = na
+
+    for i = eff_lb - seed_len to eff_lb - 1
+        if na(sh) or high[i] > sh
+            sh := high[i]
+            shx := bar_index - i
+        if na(sl) or low[i] < sl
+            sl := low[i]
+            slx := bar_index - i
+
+    float p0 = shx <= slx ? sh : sl
+    int p0t = shx <= slx ? 1 : -1
+    float p1 = shx <= slx ? sl : sh
+    int p1t = shx <= slx ? -1 : 1
+    int p1x = shx <= slx ? slx : shx
+
+    float curY = p1
+    int curT = p1t
+    int curX = p1x
+
+    float lastConfirmedTop = p0t == 1 ? p0 : p1t == 1 ? p1 : na
+    float lastConfirmedBottom = p0t == -1 ? p0 : p1t == -1 ? p1 : na
+
+    int oppRun = 0
+    int oppGoodStreak = 0
+    int barsFromExtreme = 0
+
+    for off = scan_from to 0
+        xCur = bar_index - off
+        hCur = high[off]
+        lCur = low[off]
+
+        if xCur > curX
+            if curT == 1
+                if hCur > curY
+                    curY := hCur
+                    curX := xCur
+                    oppRun := 0
+                    oppGoodStreak := 0
+                    barsFromExtreme := 0
+                else
+                    barsFromExtreme += 1
+                    isOpp = close[off] < open[off]
+                    if isOpp
+                        oppRun += 1
+                        oppGoodStreak := bear_good(off) ? oppGoodStreak + 1 : 0
+                    else
+                        oppRun := 0
+                        oppGoodStreak := 0
+                    // Ojas rule: reverse when either structure breaks OR 2 consecutive opposite good candles confirm.
+                    brokeStructure = not na(lastConfirmedBottom) and lCur < lastConfirmedBottom
+                    strictOpp = barsFromExtreme <= 3 and oppRun >= 3 and oppGoodStreak >= 3
+                    reversalOk = brokeStructure or strictOpp
+                    if reversalOk
+                        lastConfirmedTop := curY
+                        curY := lCur
+                        curT := -1
+                        curX := xCur
+                        oppRun := 0
+                        oppGoodStreak := 0
+            else
+                if lCur < curY
+                    curY := lCur
+                    curX := xCur
+                    oppRun := 0
+                    oppGoodStreak := 0
+                    barsFromExtreme := 0
+                else
+                    barsFromExtreme += 1
+                    isOpp = close[off] > open[off]
+                    if isOpp
+                        oppRun += 1
+                        oppGoodStreak := bull_good(off) ? oppGoodStreak + 1 : 0
+                    else
+                        oppRun := 0
+                        oppGoodStreak := 0
+                    // Ojas rule: reverse when either structure breaks OR 2 consecutive opposite good candles confirm.
+                    brokeStructure = not na(lastConfirmedTop) and hCur > lastConfirmedTop
+                    strictOpp = barsFromExtreme <= 3 and oppRun >= 3 and oppGoodStreak >= 3
+                    reversalOk = brokeStructure or strictOpp
+                    if reversalOk
+                        lastConfirmedBottom := curY
+                        curY := hCur
+                        curT := 1
+                        curX := xCur
+                        oppRun := 0
+                        oppGoodStreak := 0
+
+    dir = curT == 1 ? 1 : -1
+    anchor = dir == 1 ? lastConfirmedBottom : lastConfirmedTop
+    [dir, anchor]
+
+// ===================== AKRITI MOVE ENGINE (OJAS LOGIC ON AKRITI PIVOTS) =====================
+move_engine_ak(f_len, lb) =>
+    ph = ta.pivothigh(high, f_len, f_len)
+    pl = ta.pivotlow(low, f_len, f_len)
+
+    var float[] pY = array.new_float()
+    var int[]   pT = array.new_int()   // +1 = AH, -1 = AL
+    var int[]   pX = array.new_int()
+
+    // Confirmed fractal highs
+    if not na(ph)
+        pxh = bar_index[f_len]
+        nH = array.size(pT)
+        if nH == 0
+            array.push(pY, ph)
+            array.push(pT, 1)
+            array.push(pX, pxh)
+        else
+            ltH = array.get(pT, nH - 1)
+            lyH = array.get(pY, nH - 1)
+            if ltH == 1
+                if ph >= lyH
+                    array.set(pY, nH - 1, ph)
+                    array.set(pX, nH - 1, pxh)
+            else
+                array.push(pY, ph)
+                array.push(pT, 1)
+                array.push(pX, pxh)
+
+    // Confirmed fractal lows
+    if not na(pl)
+        pxl = bar_index[f_len]
+        nL = array.size(pT)
+        if nL == 0
+            array.push(pY, pl)
+            array.push(pT, -1)
+            array.push(pX, pxl)
+        else
+            ltL = array.get(pT, nL - 1)
+            lyL = array.get(pY, nL - 1)
+            if ltL == -1
+                if pl <= lyL
+                    array.set(pY, nL - 1, pl)
+                    array.set(pX, nL - 1, pxl)
+            else
+                array.push(pY, pl)
+                array.push(pT, -1)
+                array.push(pX, pxl)
+
+    // Optional instant structure-break pivot append
+    nSB = array.size(pT)
+    if ak_instant_structure_flip and nSB >= 2
+        tLastSB = array.get(pT, nSB - 1)
+        float lastOppY = na
+        if tLastSB == 1
+            for i = nSB - 2 to 0
+                if array.get(pT, i) == -1
+                    lastOppY := array.get(pY, i)
+                    break
+            if not na(lastOppY) and low < lastOppY
+                array.push(pY, low)
+                array.push(pT, -1)
+                array.push(pX, bar_index)
+        else
+            for i = nSB - 2 to 0
+                if array.get(pT, i) == 1
+                    lastOppY := array.get(pY, i)
+                    break
+            if not na(lastOppY) and high > lastOppY
+                array.push(pY, high)
+                array.push(pT, 1)
+                array.push(pX, bar_index)
+
+    // Trim pivot buffer
+    while array.size(pT) > 16
+        array.shift(pY)
+        array.shift(pT)
+        array.shift(pX)
+
+    n = array.size(pT)
+
+    // Latest pivots
+    y1 = n >= 1 ? array.get(pY, n - 1) : na
+    t1 = n >= 1 ? array.get(pT, n - 1) : 0
+    y2 = n >= 2 ? array.get(pY, n - 2) : na
+    t2 = n >= 2 ? array.get(pT, n - 2) : 0
+    y3 = n >= 3 ? array.get(pY, n - 3) : na
+    t3 = n >= 3 ? array.get(pT, n - 3) : 0
+
+    // Ojas-style move logic on Akriti pivots
+    fallbackLatestIsHigh = n >= 1 ? (t1 == 1) : (ta.highestbars(high, lb) <= ta.lowestbars(low, lb))
+    move = f_move_from_pivots(y1, t1, n >= 1, y2, t2, n >= 2, y3, t3, n >= 3, fallbackLatestIsHigh)
+
+    // Last confirmed opposite anchors
+    float lastConfirmedTop = na
+    float lastConfirmedBottom = na
+    if n >= 1
+        for i = n - 1 to 0
+            tt = array.get(pT, i)
+            yy = array.get(pY, i)
+            if na(lastConfirmedTop) and tt == 1
+                lastConfirmedTop := yy
+            if na(lastConfirmedBottom) and tt == -1
+                lastConfirmedBottom := yy
+            if not na(lastConfirmedTop) and not na(lastConfirmedBottom)
+                break
+
+    // IMPORTANT:
+    // Same-bar structure-break override only if instant flip is enabled.
+    if ak_instant_structure_flip
+        if move == "Up" and not na(lastConfirmedBottom) and low < lastConfirmedBottom
+            move := "Down"
+        if move == "Down" and not na(lastConfirmedTop) and high > lastConfirmedTop
+            move := "Up"
+
+    // SL anchor
+    sl = move == "Up" ? (not na(lastConfirmedBottom) ? lastConfirmedBottom : ta.lowest(low, lb))
+                      : (not na(lastConfirmedTop) ? lastConfirmedTop : ta.highest(high, lb))
+
+    [move, sl]
+
+
+// ===================== GATI MOVE ENGINE (OJAS-STYLE EVALUATION, ATR PIVOTS) =====================
+f_calc_move(tf_mult) =>
+    eps = 0.000001
+    lb_guess = math.abs(tf_mult - d_mult) < eps ? lookback_d :
+      math.abs(tf_mult - h4_mult) < eps ? lookback_h4 :
+      math.abs(tf_mult - h1_mult) < eps ? lookback_h1 :
+      math.abs(tf_mult - m15_mult) < eps ? lookback_m15 : lookback_m5
+
+    lb_eff = math.max(3, math.min(lb_guess, bar_index + 1))
+    lb_start = bar_index - lb_eff + 1
+
+    atrVal = ta.atr(14)
+    revDist = close * ((atrVal / close * 100 * tf_mult) / 100)
+
+    // Build ATR-based pivots FRESH per call (no `var`) to avoid cross-timeframe contamination.
+    float[] pY = array.new_float()
+    int[] pT = array.new_int()   // 1=H, -1=L
+    int[] pX = array.new_int()
+
+    seed_idx = lb_start
+    seed_val = close[bar_index - seed_idx]
+    int curT = 0
+    float curY = seed_val
+    int curX = seed_idx
+
+    for x = lb_start + 1 to bar_index
+        off = bar_index - x
+        h = high[off]
+        l = low[off]
+
+        if curT == 0
+            if h - curY >= revDist
+                curT := 1
+                curY := h
+                curX := x
+                array.push(pY, curY)
+                array.push(pT, 1)
+                array.push(pX, curX)
+            else if curY - l >= revDist
+                curT := -1
+                curY := l
+                curX := x
+                array.push(pY, curY)
+                array.push(pT, -1)
+                array.push(pX, curX)
+
+        else if curT == 1
+            if h >= curY
+                curY := h
+                curX := x
+                n1 = math.min(array.size(pY), math.min(array.size(pT), array.size(pX)))
+                if n1 > 0 and array.get(pT, n1 - 1) == 1
+                    array.set(pY, n1 - 1, curY)
+                    array.set(pX, n1 - 1, curX)
+            else if curY - l >= revDist
+                curT := -1
+                curY := l
+                curX := x
+                array.push(pY, curY)
+                array.push(pT, -1)
+                array.push(pX, curX)
+
+        else
+            if l <= curY
+                curY := l
+                curX := x
+                n2 = math.min(array.size(pY), math.min(array.size(pT), array.size(pX)))
+                if n2 > 0 and array.get(pT, n2 - 1) == -1
+                    array.set(pY, n2 - 1, curY)
+                    array.set(pX, n2 - 1, curX)
+            else if h - curY >= revDist
+                curT := 1
+                curY := h
+                curX := x
+                array.push(pY, curY)
+                array.push(pT, 1)
+                array.push(pX, curX)
+
+    // Defensive sync (should normally be equal lengths, but prevents runtime bounds errors).
+    szMin = math.min(array.size(pY), math.min(array.size(pT), array.size(pX)))
+    while array.size(pY) > szMin
+        array.pop(pY)
+    while array.size(pT) > szMin
+        array.pop(pT)
+    while array.size(pX) > szMin
+        array.pop(pX)
+
+    // Lookback extremes (used as fallback anchors).
+    hi_off = ta.highestbars(high, lb_eff)
+    lo_off = ta.lowestbars(low, lb_eff)
+    hi_idx = bar_index - hi_off
+    lo_idx = bar_index - lo_off
+    hi_val = ta.highest(high, lb_eff)
+    lo_val = ta.lowest(low, lb_eff)
+
+    latestIsHigh = hi_off <= lo_off
+
+    // Latest 3 pivots for Ojas-style move interpretation.
+    n = array.size(pY)
+    y1 = n >= 1 ? array.get(pY, n - 1) : na
+    t1 = n >= 1 ? array.get(pT, n - 1) : 0
+    y2 = n >= 2 ? array.get(pY, n - 2) : na
+    t2 = n >= 2 ? array.get(pT, n - 2) : 0
+    y3 = n >= 3 ? array.get(pY, n - 3) : na
+    t3 = n >= 3 ? array.get(pT, n - 3) : 0
+
+    mv = n >= 3 ?
+      f_move_from_pivots(y1, t1, true, y2, t2, true, y3, t3, true, latestIsHigh) :
+      (latestIsHigh ? "Up" : "Down")
+
+    // Same-bar structure-break safety (same intent as Ojas/Akriti overrides).
+    if n >= 2
+        float oppLvl = na
+        if t1 == 1
+            for i = n - 2 to 0
+                if array.get(pT, i) == -1
+                    oppLvl := array.get(pY, i)
+                    break
+            if not na(oppLvl) and low < oppLvl
+                mv := "Down"
+        else if t1 == -1
+            for i = n - 2 to 0
+                if array.get(pT, i) == 1
+                    oppLvl := array.get(pY, i)
+                    break
+            if not na(oppLvl) and high > oppLvl
+                mv := "Up"
+
+
+    // Requested correction: when pivots are too sparse (plot typically invisible),
+    // reverse the fallback move direction.
+    if n < 2
+        mv := latestIsHigh ? "Down" : "Up"
+
+    [mv, hi_idx, lo_idx, hi_val, lo_val, revDist]
+
+
+
+// ===================== PYTHON PARITY LOGIC CORE (from svayam_sangam_full_final.py) =====================
+PY_HIGH_T = 1
+PY_LOW_T  = -1
+PY_UP     = "Up"
+PY_DOWN   = "Down"
+
+// ===================== BASIC HELPERS =====================
+py_tr() =>
+    pc = close[1]
+    math.max(high - low, math.max(math.abs(high - pc), math.abs(low - pc)))
+
+py_atr_sma14() =>
+    ta.sma(py_tr(), 14)
+
+py_rsi_sma14() =>
+    delta = close - close[1]
+    gain = math.max(delta, 0.0)
+    loss = math.max(-delta, 0.0)
+    avg_gain = ta.sma(gain, 14)
+    avg_loss = ta.sma(loss, 14)
+    avg_loss == 0.0 ? 100.0 : 100.0 - (100.0 / (1.0 + avg_gain / avg_loss))
+
+py_body_pct(int off) =>
+    if na(off) or off < 0 or off > bar_index
+        0.0
+    else
+        rng = high[off] - low[off]
+        body = math.abs(close[off] - open[off])
+        rng > 0 ? body / rng : 0.0
+
+py_bull_good(int off) =>
+    off + 1 <= bar_index and py_body_pct(off) >= 0.70 and close[off] > close[off + 1]
+
+py_bear_good(int off) =>
+    off + 1 <= bar_index and py_body_pct(off) >= 0.70 and close[off] < close[off + 1]
+
+py_clear_objects(array<line> lines, array<label> labels) =>
+    while array.size(lines) > 0
+        line.delete(array.pop(lines))
+    while array.size(labels) > 0
+        label.delete(array.pop(labels))
+
+py_add_or_update(array<int> idx, array<float> price, array<int> typ, int x, float y, int t) =>
+    n = array.size(idx)
+    if n == 0
+        array.push(idx, x), array.push(price, y), array.push(typ, t)
+    else
+        lt = array.get(typ, n - 1)
+        lp = array.get(price, n - 1)
+        if t == lt
+            if t == PY_HIGH_T and y > lp
+                array.set(idx, n - 1, x), array.set(price, n - 1, y), array.set(typ, n - 1, t)
+            else if t == PY_LOW_T and y < lp
+                array.set(idx, n - 1, x), array.set(price, n - 1, y), array.set(typ, n - 1, t)
+        else
+            array.push(idx, x), array.push(price, y), array.push(typ, t)
+
+py_seed_points(array<int> idx, array<float> price, array<int> typ, int lb) =>
+    eff = math.max(2, math.min(lb, bar_index + 1))
+    seed_len = math.max(2, int(math.round(eff * seed_pct / 100.0)))
+    oldest = bar_index - eff + 1
+    seed_end = oldest + seed_len - 1
+    float hi = na
+    float lo = na
+    int hi_x = na
+    int lo_x = na
+    for x = oldest to seed_end
+        off = bar_index - x
+        if off >= 0
+            h = high[off]
+            l = low[off]
+            if na(hi) or h > hi
+                hi := h
+                hi_x := x
+            if na(lo) or l < lo
+                lo := l
+                lo_x := x
+    if not na(hi_x) and not na(lo_x)
+        if hi_x < lo_x
+            array.push(idx, hi_x), array.push(price, hi), array.push(typ, PY_HIGH_T)
+            array.push(idx, lo_x), array.push(price, lo), array.push(typ, PY_LOW_T)
+        else
+            array.push(idx, lo_x), array.push(price, lo), array.push(typ, PY_LOW_T)
+            array.push(idx, hi_x), array.push(price, hi), array.push(typ, PY_HIGH_T)
+
+py_prev_price(array<float> price, array<int> typ, int start_pos, int desired) =>
+    float out = na
+    if start_pos >= 0
+        for k = 0 to start_pos
+            j = start_pos - k
+            if na(out) and array.get(typ, j) == desired
+                out := array.get(price, j)
+    out
+
+py_latest_price(array<float> price, array<int> typ, int desired) =>
+    float out = na
+    n = array.size(price)
+    if n > 0
+        for k = 0 to n - 1
+            j = n - 1 - k
+            if na(out) and array.get(typ, j) == desired
+                out := array.get(price, j)
+    out
+
+py_extreme_point_price(array<float> price, array<int> typ, int desired, bool want_lowest) =>
+    float out = na
+    n = array.size(price)
+    if n > 0
+        for i = 0 to n - 1
+            if array.get(typ, i) == desired
+                v = array.get(price, i)
+                if na(out)
+                    out := v
+                else
+                    out := want_lowest ? math.min(out, v) : math.max(out, v)
+    out
+
+// Structure-start / invalidation stoploss anchor.
+// Final locked rule after visual review:
+// BUY  anchor = lowest LOW point generated by the same strategy inside the active lookback sequence.
+// SELL anchor = highest HIGH point generated by the same strategy inside the active lookback sequence.
+// This prevents the SL from shifting to a later minor corrective point.
+// The 0.5% SL buffer is applied later in the dashboard row calculation.
+py_structure_sl_anchor(array<float> price, array<int> typ, string core) =>
+    core == PY_UP ? py_extreme_point_price(price, typ, PY_LOW_T, true) : py_extreme_point_price(price, typ, PY_HIGH_T, false)
+
+py_disha(array<int> idx, array<float> price, array<int> typ) =>
+    n = array.size(idx)
+    string structure_move = PY_DOWN
+    if n < 2
+        structure_move
+    else
+        p1_i = array.get(idx, n - 1)
+        p1_p = array.get(price, n - 1)
+        p1_t = array.get(typ, n - 1)
+        p2_p = array.get(price, n - 2)
+        p2_t = array.get(typ, n - 2)
+        if p1_t == PY_HIGH_T and p2_t == PY_LOW_T
+            prev_h = py_prev_price(price, typ, n - 3, PY_HIGH_T)
+            structure_move := na(prev_h) or p1_p > prev_h ? PY_UP : PY_DOWN
+        else if p1_t == PY_LOW_T and p2_t == PY_HIGH_T
+            prev_l = py_prev_price(price, typ, n - 3, PY_LOW_T)
+            prev_h = py_prev_price(price, typ, n - 3, PY_HIGH_T)
+            structure_move := not na(prev_l) and not na(prev_h) and p1_p > prev_l and p2_p > prev_h ? PY_UP : PY_DOWN
+        last_h = py_latest_price(price, typ, PY_HIGH_T)
+        last_l = py_latest_price(price, typ, PY_LOW_T)
+        if na(last_h) or na(last_l)
+            structure_move
+        else
+            string final_move = structure_move
+            if p1_i + 1 <= bar_index
+                float future_hh = na
+                float future_ll = na
+                for x = p1_i + 1 to bar_index
+                    off = bar_index - x
+                    future_hh := na(future_hh) or high[off] > future_hh ? high[off] : future_hh
+                    future_ll := na(future_ll) or low[off] < future_ll ? low[off] : future_ll
+                final_move := not na(future_hh) and future_hh > last_h ? PY_UP : not na(future_ll) and future_ll < last_l ? PY_DOWN : structure_move
+            final_move
+
+py_div_flags(array<int> idx, array<float> price, array<int> typ) =>
+    r = py_rsi_sma14()
+    n = array.size(idx)
+    bool div_up = false
+    bool div_dn = false
+    if n >= 3
+        p1_i = array.get(idx, n - 1)
+        p1_p = array.get(price, n - 1)
+        p1_t = array.get(typ, n - 1)
+        p3_i = array.get(idx, n - 3)
+        p3_p = array.get(price, n - 3)
+        p3_t = array.get(typ, n - 3)
+        off1 = bar_index - p1_i
+        off3 = bar_index - p3_i
+        r1 = off1 >= 0 ? r[off1] : na
+        r3 = off3 >= 0 ? r[off3] : na
+        div_up := p1_t == PY_HIGH_T and p3_t == PY_HIGH_T and not na(r1) and not na(r3) and p1_p > p3_p and r1 < r3
+        div_dn := p1_t == PY_LOW_T and p3_t == PY_LOW_T and not na(r1) and not na(r3) and p1_p < p3_p and r1 > r3
+    [div_up, div_dn]
+
+// ===================== STRICT RSI EXTREME CYCLE DIV (v44-safe add-on) =====================
+// This does NOT change move/plot/SL logic.
+// Negative DIV: RSI first reaches >70, anchor that candle high + RSI.
+//   If price later makes higher high while RSI is lower, negative DIV becomes active until RSI < 70.
+// Positive DIV: RSI first reaches <30, anchor that candle low + RSI.
+//   If price later makes lower low while RSI is higher, positive DIV becomes active until RSI > 30.
+py_div_cycle_flags() =>
+    r = py_rsi_sma14()
+
+    var bool neg_watch = false
+    var bool neg_active = false
+    var float neg_anchor_price = na
+    var float neg_anchor_rsi = na
+
+    var bool pos_watch = false
+    var bool pos_active = false
+    var float pos_anchor_price = na
+    var float pos_anchor_rsi = na
+
+    if not na(r)
+        // Reset completed cycles only at the neutral line.
+        if r <= 70
+            neg_watch := false
+            neg_active := false
+            neg_anchor_price := na
+            neg_anchor_rsi := na
+
+        if r >= 30 
+            pos_watch := false
+            pos_active := false
+            pos_anchor_price := na
+            pos_anchor_rsi := na
+
+        // Start negative-divergence watch only from overbought.
+        if not neg_watch and r > 70
+            neg_watch := true
+            neg_active := false
+            neg_anchor_price := high
+            neg_anchor_rsi := r
+
+        // Start positive-divergence watch only from oversold.
+        if not pos_watch and r < 30
+            pos_watch := true
+            pos_active := false
+            pos_anchor_price := low
+            pos_anchor_rsi := r
+
+        // Check divergence BEFORE any anchor change. Anchor is persistent until reset.
+        if neg_watch and not neg_active and not na(neg_anchor_price) and not na(neg_anchor_rsi)
+            if high > neg_anchor_price and r < neg_anchor_rsi
+                neg_active := true
+
+        if pos_watch and not pos_active and not na(pos_anchor_price) and not na(pos_anchor_rsi)
+            if low < pos_anchor_price and r > pos_anchor_rsi
+                pos_active := true
+
+    [neg_active, pos_active]
+
+// ===================== POINT ENGINES =====================
+py_build_gati(array<int> idx, array<float> price, array<int> typ, int lb, float mult) =>
+    py_seed_points(idx, price, typ, lb)
+    atr_series = py_atr_sma14()
+    n = array.size(idx)
+    if n > 0
+        current_i = array.get(idx, n - 1)
+        current_p = array.get(price, n - 1)
+        current_t = array.get(typ, n - 1)
+        start_x = current_i + 1
+        if start_x <= bar_index
+            for x = start_x to bar_index
+                off = bar_index - x
+                a = atr_series[off]
+                if not na(a)
+                    h = high[off]
+                    l = low[off]
+                    threshold = a * mult
+                    if current_t == PY_HIGH_T
+                        if h > current_p
+                            current_i := x
+                            current_p := h
+                            array.set(idx, array.size(idx) - 1, current_i), array.set(price, array.size(price) - 1, current_p), array.set(typ, array.size(typ) - 1, PY_HIGH_T)
+                        else if current_p - l >= threshold
+                            current_i := x
+                            current_p := l
+                            current_t := PY_LOW_T
+                            array.push(idx, current_i), array.push(price, current_p), array.push(typ, current_t)
+                    else
+                        if l < current_p
+                            current_i := x
+                            current_p := l
+                            array.set(idx, array.size(idx) - 1, current_i), array.set(price, array.size(price) - 1, current_p), array.set(typ, array.size(typ) - 1, PY_LOW_T)
+                        else if h - current_p >= threshold
+                            current_i := x
+                            current_p := h
+                            current_t := PY_HIGH_T
+                            array.push(idx, current_i), array.push(price, current_p), array.push(typ, current_t)
+
+py_build_ojas(array<int> idx, array<float> price, array<int> typ, int lb) =>
+    py_seed_points(idx, price, typ, lb)
+    n = array.size(idx)
+    if n > 0
+        current_i = array.get(idx, n - 1)
+        current_p = array.get(price, n - 1)
+        current_t = array.get(typ, n - 1)
+        start_x = current_i + 1
+        int b1 = na
+        int b2 = na
+        int b3 = na
+        int s1 = na
+        int s2 = na
+        int s3 = na
+        if start_x <= bar_index
+            for x = start_x to bar_index
+                off = bar_index - x
+                h = high[off]
+                l = low[off]
+                if current_t == PY_HIGH_T and h > current_p
+                    current_i := x
+                    current_p := h
+                    array.set(idx, array.size(idx) - 1, current_i), array.set(price, array.size(price) - 1, current_p), array.set(typ, array.size(typ) - 1, PY_HIGH_T)
+                    b1 := na, b2 := na, b3 := na, s1 := na, s2 := na, s3 := na
+                else if current_t == PY_LOW_T and l < current_p
+                    current_i := x
+                    current_p := l
+                    array.set(idx, array.size(idx) - 1, current_i), array.set(price, array.size(price) - 1, current_p), array.set(typ, array.size(typ) - 1, PY_LOW_T)
+                    b1 := na, b2 := na, b3 := na, s1 := na, s2 := na, s3 := na
+                if py_bear_good(off)
+                    s1 := s2, s2 := s3, s3 := x
+                    b1 := na, b2 := na, b3 := na
+                else if py_bull_good(off)
+                    b1 := b2, b2 := b3, b3 := x
+                    s1 := na, s2 := na, s3 := na
+                else
+                    b1 := na, b2 := na, b3 := na, s1 := na, s2 := na, s3 := na
+                if current_t == PY_HIGH_T and not na(s1) and not na(s2) and not na(s3)
+                    o1 = bar_index - s1, o2 = bar_index - s2, o3 = bar_index - s3
+                    lo_x = low[o1] <= low[o2] and low[o1] <= low[o3] ? s1 : low[o2] <= low[o1] and low[o2] <= low[o3] ? s2 : s3
+                    lo_off = bar_index - lo_x
+                    current_i := lo_x
+                    current_p := low[lo_off]
+                    current_t := PY_LOW_T
+                    array.push(idx, current_i), array.push(price, current_p), array.push(typ, current_t)
+                    b1 := na, b2 := na, b3 := na, s1 := na, s2 := na, s3 := na
+                else if current_t == PY_LOW_T and not na(b1) and not na(b2) and not na(b3)
+                    o1 = bar_index - b1, o2 = bar_index - b2, o3 = bar_index - b3
+                    hi_x = high[o1] >= high[o2] and high[o1] >= high[o3] ? b1 : high[o2] >= high[o1] and high[o2] >= high[o3] ? b2 : b3
+                    hi_off = bar_index - hi_x
+                    current_i := hi_x
+                    current_p := high[hi_off]
+                    current_t := PY_HIGH_T
+                    array.push(idx, current_i), array.push(price, current_p), array.push(typ, current_t)
+                    b1 := na, b2 := na, b3 := na, s1 := na, s2 := na, s3 := na
+
+py_fallback_points(array<int> idx, array<float> price, array<int> typ, int lb) =>
+    eff = math.max(2, math.min(lb, bar_index + 1))
+    oldest = bar_index - eff + 1
+    float hi = na
+    float lo = na
+    int hi_x = na
+    int lo_x = na
+    for x = oldest to bar_index
+        off = bar_index - x
+        if na(hi) or high[off] > hi
+            hi := high[off], hi_x := x
+        if na(lo) or low[off] < lo
+            lo := low[off], lo_x := x
+    array.clear(idx), array.clear(price), array.clear(typ)
+    if hi_x < lo_x
+        array.push(idx, hi_x), array.push(price, hi), array.push(typ, PY_HIGH_T)
+        array.push(idx, lo_x), array.push(price, lo), array.push(typ, PY_LOW_T)
+    else
+        array.push(idx, lo_x), array.push(price, lo), array.push(typ, PY_LOW_T)
+        array.push(idx, hi_x), array.push(price, hi), array.push(typ, PY_HIGH_T)
+
+py_build_akriti(array<int> idx, array<float> price, array<int> typ, int lb, int f) =>
+    py_seed_points(idx, price, typ, lb)
+    eff = math.max(2, math.min(lb, bar_index + 1))
+    oldest = bar_index - eff + 1
+    seed_len = math.max(2, int(math.round(eff * seed_pct / 100.0)))
+    start_x = math.max(oldest + seed_len, oldest + f)
+    end_x = bar_index - f
+    if end_x > start_x
+        for x = start_x to end_x
+            off = bar_index - x
+            float win_hi = na
+            float win_lo = na
+            for y = x - f to x + f
+                yoff = bar_index - y
+                win_hi := na(win_hi) or high[yoff] > win_hi ? high[yoff] : win_hi
+                win_lo := na(win_lo) or low[yoff] < win_lo ? low[yoff] : win_lo
+            is_h = high[off] == win_hi
+            is_l = low[off] == win_lo
+            if is_h and not is_l
+                py_add_or_update(idx, price, typ, x, high[off], PY_HIGH_T)
+            else if is_l and not is_h
+                py_add_or_update(idx, price, typ, x, low[off], PY_LOW_T)
+    if array.size(idx) < 2
+        py_fallback_points(idx, price, typ, lb)
+    n = array.size(idx)
+    if n > 0
+        last_i = array.get(idx, n - 1)
+        last_t = array.get(typ, n - 1)
+        latest_h = py_latest_price(price, typ, PY_HIGH_T)
+        latest_l = py_latest_price(price, typ, PY_LOW_T)
+        scan_x = last_i + 1
+        if scan_x <= bar_index
+            for x = scan_x to bar_index
+                off = bar_index - x
+                h = high[off]
+                l = low[off]
+                if last_t == PY_HIGH_T and not na(latest_l) and l < latest_l
+                    py_add_or_update(idx, price, typ, x, l, PY_LOW_T)
+                    last_t := PY_LOW_T
+                else if last_t == PY_LOW_T and not na(latest_h) and h > latest_h
+                    py_add_or_update(idx, price, typ, x, h, PY_HIGH_T)
+                    last_t := PY_HIGH_T
+                n2 = array.size(idx)
+                lp = array.get(price, n2 - 1)
+                lt = array.get(typ, n2 - 1)
+                if lt == PY_HIGH_T and h > lp
+                    array.set(idx, n2 - 1, x), array.set(price, n2 - 1, h)
+                else if lt == PY_LOW_T and l < lp
+                    array.set(idx, n2 - 1, x), array.set(price, n2 - 1, l)
+
+py_engine(int engine, int lb, float mult, int fractal) =>
+    int[] ix = array.new_int()
+    float[] pr = array.new_float()
+    int[] tp = array.new_int()
+    if engine == 1
+        py_build_gati(ix, pr, tp, lb, mult)
+    else if engine == 2
+        py_build_ojas(ix, pr, tp, lb)
+    else
+        py_build_akriti(ix, pr, tp, lb, fractal)
+    mv = py_disha(ix, pr, tp)
+    // Return SL anchors, not latest opposite points:
+    // h-slot = SELL structure invalidation HIGH, l-slot = BUY structure invalidation LOW.
+    lh = py_structure_sl_anchor(pr, tp, PY_DOWN)
+    ll = py_structure_sl_anchor(pr, tp, PY_UP)
+    [du, dd] = py_div_flags(ix, pr, tp)
+    [mv, lh, ll, du, dd]
+
+// ===================== DAILY GCR / RAT / PRICE DATA =====================
+py_rat() =>
+    close > close[1] and close[1] > close[2] and close[2] > close[3] and close[3] > close[4] ? "EPR" :
+     close < close[1] and close[1] < close[2] and close[2] < close[3] and close[3] < close[4] ? "ENR" : "NONE"
+
+py_gcr_dir() =>
+
+    // =====================
+    // VEMAR
+    // =====================
+    vema_fast = ta.ema(volume, 7)
+    vema_slow = ta.ema(volume, 14)
+
+    vemar_pass = not use_vemar or (vema_fast > vema_slow)
+
+    // =====================
+    // Candle Data
+    // =====================
+    rng   = high - low
+    body  = math.abs(close - open)
+    upper = high - math.max(open, close)
+    lower = math.min(open, close) - low
+
+    prev_rng  = high[1] - low[1]
+    prev_body = math.abs(close[1] - open[1])
+
+    prev2_rng  = high[2] - low[2]
+    prev2_body = math.abs(close[2] - open[2])
+
+    is_small_body      = rng > 0 and body / rng <= 0.30
+    is_prev_small_body = prev_rng > 0 and prev_body / prev_rng <= 0.30
+
+    // =====================
+    // Quality Long Body
+    // =====================
+    body_pct_ok = rng > 0 and (body / rng * 100.0 >= 75)
+
+    // =====================
+    // Base Engulfing
+    // =====================
+    bull_engulf =
+         close > open and
+         close[1] < open[1] and
+         open <= close[1] and
+         close >= open[1]
+
+    bear_engulf =
+         close < open and
+         close[1] > open[1] and
+         open >= close[1] and
+         close <= open[1]
+
+    // =====================
+    // 1 Candle Bullish
+    // =====================
+    bull_hammer      = close > open and lower >= body * 2 and upper <= body * 0.5
+    bull_inv_hammer  = close > open and upper >= body * 2 and lower <= body * 0.5
+    bull_marubozu    = close > open and rng > 0 and upper <= rng * 0.10 and lower <= rng * 0.10
+    bull_long_body   = close > open and body_pct_ok
+
+    // =====================
+    // 1 Candle Bearish
+    // =====================
+    bear_hanging     = close < open and lower >= body * 2 and upper <= body * 0.5
+    bear_shooting    = close < open and upper >= body * 2 and lower <= body * 0.5
+    bear_marubozu    = close < open and rng > 0 and upper <= rng * 0.10 and lower <= rng * 0.10
+    bear_long_body   = close < open and body_pct_ok
+
+    // =====================
+    // 2 Candle Bullish
+    // =====================
+    bull_piercing =
+         close[1] < open[1] and
+         close > open and
+         open <= close[1] and
+         close > (open[1] + close[1]) / 2 and
+         close < open[1]
+
+    bull_harami =
+         close[1] < open[1] and
+         close > open and
+         open >= close[1] and
+         close <= open[1]
+
+    bull_harami_cross =
+         close[1] < open[1] and
+         is_small_body and
+         open >= close[1] and
+         close <= open[1]
+
+    bull_tweezer_bottom =
+         close > open and
+         close[1] < open[1] and
+         math.abs(low - low[1]) <= ta.atr(14) * 0.10
+
+    // =====================
+    // 2 Candle Bearish
+    // =====================
+    bear_dark_cloud =
+         close[1] > open[1] and
+         close < open and
+         open >= close[1] and
+         close < (open[1] + close[1]) / 2 and
+         close > open[1]
+
+    bear_harami =
+         close[1] > open[1] and
+         close < open and
+         open <= close[1] and
+         close >= open[1]
+
+    bear_harami_cross =
+         close[1] > open[1] and
+         is_small_body and
+         open <= close[1] and
+         close >= open[1]
+
+    bear_tweezer_top =
+         close < open and
+         close[1] > open[1] and
+         math.abs(high - high[1]) <= ta.atr(14) * 0.10
+
+    // =====================
+    // 3 Candle Bullish
+    // =====================
+    bull_morning_star =
+         close[2] < open[2] and
+         prev2_body > prev2_rng * 0.50 and
+         is_prev_small_body and
+         close > open and
+         close >= (open[2] + close[2]) / 2
+
+    bull_three_soldiers =
+         close > open and
+         close[1] > open[1] and
+         close[2] > open[2] and
+         close > close[1] and
+         close[1] > close[2]
+
+    bull_three_inside_up =
+         close[2] < open[2] and
+         close[1] > open[1] and
+         open[1] >= close[2] and
+         close[1] <= open[2] and
+         close > open[2]
+
+    bull_three_outside_up =
+         close[2] < open[2] and
+         close[1] > open[1] and
+         open[1] <= close[2] and
+         close[1] >= open[2] and
+         close > close[1]
+
+    // =====================
+    // 3 Candle Bearish
+    // =====================
+    bear_evening_star =
+         close[2] > open[2] and
+         prev2_body > prev2_rng * 0.50 and
+         is_prev_small_body and
+         close < open and
+         close <= (open[2] + close[2]) / 2
+
+    bear_three_crows =
+         close < open and
+         close[1] < open[1] and
+         close[2] < open[2] and
+         close < close[1] and
+         close[1] < close[2]
+
+    bear_three_inside_down =
+         close[2] > open[2] and
+         close[1] < open[1] and
+         open[1] <= close[2] and
+         close[1] >= open[2] and
+         close < open[2]
+
+    bear_three_outside_down =
+         close[2] > open[2] and
+         close[1] < open[1] and
+         open[1] >= close[2] and
+         close[1] <= open[2] and
+         close < close[1]
+
+    // =====================
+    // Final Pattern Groups
+    // =====================
+    bull_patterns =
+         //bull_hammer or
+         //bull_inv_hammer or
+         bull_marubozu or
+         bull_long_body or
+         bull_engulf or
+         //bull_piercing or
+         //bull_harami or
+         //bull_harami_cross or
+         //bull_tweezer_bottom or
+         bull_morning_star or
+         bull_three_soldiers or
+         bull_three_inside_up or
+         bull_three_outside_up
+
+    bear_patterns =
+         //bear_hanging or
+         //bear_shooting or
+         bear_marubozu or
+         bear_long_body or
+         bear_engulf or
+         //bear_dark_cloud or
+         //bear_harami or
+         //bear_harami_cross or
+         //bear_tweezer_top or
+         bear_evening_star or
+         bear_three_crows or
+         bear_three_inside_down or
+         bear_three_outside_down
+
+    bull = vemar_pass and bull_patterns
+    bear = vemar_pass and bear_patterns
+
+    is_gcr = bull or bear
+
+    g_h = ta.valuewhen(is_gcr, high, 0)
+    g_l = ta.valuewhen(is_gcr, low, 0)
+    g_idx = ta.valuewhen(is_gcr, bar_index, 0)
+
+    has_gcr = not na(g_h) and not na(g_l) and not na(g_idx)
+
+    bool v_broken = false
+    bool gcr_rng_ok = false
+
+    if has_gcr
+        lb = math.max(1, bar_index - g_idx + 1)
+        hh = ta.highest(high, lb)
+        ll = ta.lowest(low, lb)
+        v_broken := (hh > g_h) or (ll < g_l)
+        gcr_rng_ok := not v_broken
+
+    [bull, bear, gcr_rng_ok]
+
+// ===================== PYTHON-PARITY MTF DATA =====================
+// These values are used for the dashboard / filters / SLOR. Sangam plotting below remains independent.
+// MTF rule: dashboard values are locked in fixed timeframe boxes.
+// D = Daily engine only; 4H = 240 engine only; 1H = 60 engine only; 15M/5M SL anchors = their own engines only.
+// calc_bars_count forces TradingView to load enough bars from each requested timeframe so Daily/4H/1H charts do not underfeed lower-TF engines.
+rat_st = request.security(syminfo.tickerid, "D", py_rat(), barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=150)
+[gcr_bull, gcr_bear, gcr_rng] = request.security(syminfo.tickerid, "D", py_gcr_dir(), barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=150)
+vema_fast_d = request.security(syminfo.tickerid, "D", ta.ema(volume, 7))
+vema_slow_d = request.security(syminfo.tickerid, "D", ta.ema(volume, 14))
+
+vemar_pass = vema_fast_d > vema_slow_d
+gcr_raw = gcr_bull or gcr_bear
+//gcr_rng = true
+
+gh = request.security(syminfo.tickerid, "D", high, barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=150)
+gl = request.security(syminfo.tickerid, "D", low,  barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=150)
+m15_close = request.security(syminfo.tickerid, "15", close, barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=500)
+m5_close  = request.security(syminfo.tickerid, "5",  close, barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=600)
+
+// engine: 1 = GATI, 2 = OJAS, 3 = AKRITI
+[g_d, g_d_h, g_d_l, g_d_du, g_d_dd] = request.security(syminfo.tickerid, "D",   py_engine(1, lookback_d,   d_mult,   d_f),   barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=150)
+[g_h4, g_h4_h, g_h4_l, g_h4_du, g_h4_dd] = request.security(syminfo.tickerid, "240", py_engine(1, lookback_h4, h4_mult,  h4_f),  barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=250)
+[g_h1, g_h1_h, g_h1_l, g_h1_du, g_h1_dd] = request.security(syminfo.tickerid, "60",  py_engine(1, lookback_h1, h1_mult,  h1_f),  barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=350)
+[g_m15, g_m15_h, g_m15_l, g_m15_du, g_m15_dd] = request.security(syminfo.tickerid, "15", py_engine(1, lookback_m15, m15_mult, m15_f), barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=500)
+[g_m5, g_m5_h, g_m5_l, g_m5_du, g_m5_dd] = request.security(syminfo.tickerid, "5", py_engine(1, lookback_m5, m5_mult, m5_f), barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=600)
+
+[o_d, o_d_h, o_d_l, o_d_du, o_d_dd] = request.security(syminfo.tickerid, "D",   py_engine(2, lookback_d,   d_mult,   d_f),   barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=150)
+[o_h4, o_h4_h, o_h4_l, o_h4_du, o_h4_dd] = request.security(syminfo.tickerid, "240", py_engine(2, lookback_h4, h4_mult,  h4_f),  barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=250)
+[o_h1, o_h1_h, o_h1_l, o_h1_du, o_h1_dd] = request.security(syminfo.tickerid, "60",  py_engine(2, lookback_h1, h1_mult,  h1_f),  barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=350)
+[o_m15, o_m15_h, o_m15_l, o_m15_du, o_m15_dd] = request.security(syminfo.tickerid, "15", py_engine(2, lookback_m15, m15_mult, m15_f), barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=500)
+[o_m5, o_m5_h, o_m5_l, o_m5_du, o_m5_dd] = request.security(syminfo.tickerid, "5", py_engine(2, lookback_m5, m5_mult, m5_f), barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=600)
+
+[a_d, a_d_h, a_d_l, a_d_du, a_d_dd] = request.security(syminfo.tickerid, "D",   py_engine(3, lookback_d,   d_mult,   d_f),   barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=150)
+[a_h4, a_h4_h, a_h4_l, a_h4_du, a_h4_dd] = request.security(syminfo.tickerid, "240", py_engine(3, lookback_h4, h4_mult,  h4_f),  barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=250)
+[a_h1, a_h1_h, a_h1_l, a_h1_du, a_h1_dd] = request.security(syminfo.tickerid, "60",  py_engine(3, lookback_h1, h1_mult,  h1_f),  barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=350)
+[a_m15, a_m15_h, a_m15_l, a_m15_du, a_m15_dd] = request.security(syminfo.tickerid, "15", py_engine(3, lookback_m15, m15_mult, m15_f), barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=500)
+[a_m5, a_m5_h, a_m5_l, a_m5_du, a_m5_dd] = request.security(syminfo.tickerid, "5", py_engine(3, lookback_m5, m5_mult, m5_f), barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=600)
+
+// Independent strict RSI DIV cycle flags by timeframe. These are used only as the DIV filter waterfall.
+[div_d_neg, div_d_pos]     = request.security(syminfo.tickerid, "D",   py_div_cycle_flags(), barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=150)
+[div_h4_neg, div_h4_pos]   = request.security(syminfo.tickerid, "240", py_div_cycle_flags(), barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=250)
+[div_h1_neg, div_h1_pos]   = request.security(syminfo.tickerid, "60",  py_div_cycle_flags(), barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=350)
+[div_m15_neg, div_m15_pos] = request.security(syminfo.tickerid, "15",  py_div_cycle_flags(), barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=500)
+[div_m5_neg, div_m5_pos]   = request.security(syminfo.tickerid, "5",   py_div_cycle_flags(), barmerge.gaps_off, barmerge.lookahead_off, calc_bars_count=600)
+
+// ===================== MOVE DEBUG TABLE =====================
+var table move_dbg = table.new(position.top_right, 6, 4, border_width=1)
+
+f_move_bg(mv) =>
+    mv == "Up" ? color.new(color.blue, 70) : mv == "Down" ? color.new(color.red, 70) : color.new(color.gray, 80)
+
+f_move_row(r, nm, d_mv, h4_mv, h1_mv, m15_mv, m5_mv) =>
+    table.cell(move_dbg, 0, r, nm, bgcolor=color.new(color.black, 0), text_color=color.white)
+    table.cell(move_dbg, 1, r, d_mv,   bgcolor=f_move_bg(d_mv),   text_color=color.white)
+    table.cell(move_dbg, 2, r, h4_mv,  bgcolor=f_move_bg(h4_mv),  text_color=color.white)
+    table.cell(move_dbg, 3, r, h1_mv,  bgcolor=f_move_bg(h1_mv),  text_color=color.white)
+    table.cell(move_dbg, 4, r, m15_mv, bgcolor=f_move_bg(m15_mv), text_color=color.white)
+    table.cell(move_dbg, 5, r, m5_mv,  bgcolor=f_move_bg(m5_mv),  text_color=color.white)
+
+if barstate.islast
+    table.clear(move_dbg, 0, 0, 5, 3)
+    any_dbg = show_moves_gati or show_moves_ojas or show_moves_akriti
+    if any_dbg
+        table.cell(move_dbg, 0, 0, "Strategy", bgcolor=color.black, text_color=color.white)
+        table.cell(move_dbg, 1, 0, "D",   bgcolor=color.black, text_color=color.white)
+        table.cell(move_dbg, 2, 0, "H4",  bgcolor=color.black, text_color=color.white)
+        table.cell(move_dbg, 3, 0, "H1",  bgcolor=color.black, text_color=color.white)
+        table.cell(move_dbg, 4, 0, "M15", bgcolor=color.black, text_color=color.white)
+        table.cell(move_dbg, 5, 0, "M5",  bgcolor=color.black, text_color=color.white)
+        if show_moves_gati
+            f_move_row(1, "Gati",   g_d, g_h4, g_h1, g_m15, g_m5)
+        if show_moves_ojas
+            f_move_row(2, "Ojas",   o_d, o_h4, o_h1, o_m15, o_m5)
+        if show_moves_akriti
+            f_move_row(3, "Akriti", a_d, a_h4, a_h1, a_m15, a_m5)
+
+// ===================== PYTHON-PARITY WATERFALL + SLOR =====================
+auto_fno_symbol = syminfo.type == "futures" or syminfo.type == "option" or str.contains(syminfo.ticker, "1!") or str.contains(syminfo.tickerid, "1!")
+is_fno_symbol = instrument_mode == "Futures/Options" ? true : instrument_mode == "Equity" ? false : auto_fno_symbol
+
+f_auto_fno_lot_size() =>
+    // Auto FNO lot size / contract multiplier from TradingView symbol metadata.
+    // For NSE stock futures, syminfo.pointvalue should represent the exchange lot size / point multiplier.
+    // Manual FNO Lot Size remains only as emergency override if the feed exposes pointvalue incorrectly.
+    pv = syminfo.pointvalue
+    not na(pv) and pv > 0 ? pv : na
+
+effective_fno_lot_size = fno_lot_size > 0 ? fno_lot_size : f_auto_fno_lot_size()
+
+f_entry_py(string core) =>
+    core == "Up" ? gh * 1.001 : gl * 0.999
+
+f_slor_qty_py(float entry, float sl) =>
+    // Python parity provides Entry and SL. SLOR only validates risk sizing.
+    // FNO: risk per lot = abs(entry - SL) * lot size; lots = floor(27188 / risk per lot); pass only if risk per lot < 27188 and lots >= 1.
+    // Equity: qty = floor(13594 / abs(entry - SL)); lot value = qty * entry; pass only if lot value is within configured band.
+    risk = not na(entry) and not na(sl) ? math.abs(entry - sl) : na
+    float q = na
+    bool ok = not use_slor
+    if use_slor and not na(risk) and risk > 0
+        if is_fno_symbol
+            per_lot_risk = not na(effective_fno_lot_size) and effective_fno_lot_size > 0 ? risk * effective_fno_lot_size : na
+            q := not na(per_lot_risk) and per_lot_risk > 0 ? math.floor(fno_sl_amount / per_lot_risk) : 0.0
+            ok := not na(per_lot_risk) and per_lot_risk < fno_sl_amount and q >= 1
+        else
+            // Equity SLOR rule v44:
+            // Step 1: Base qty from fixed equity risk amount.
+            // Step 2: If resulting lot value is below minimum -> SLOR.
+            // Step 3: If resulting lot value is above maximum -> recalculate qty from max base / risk, as requested.
+            // For SELL, risk is still abs(entry - SL), i.e. abs(SL - entry).
+            base_q = math.floor(equity_sl_amount / risk)
+            base_lot_value = base_q * entry
+            if base_q < 1 or base_lot_value < equity_lot_value_min
+                q := base_q
+                ok := false
+            else if base_lot_value > equity_lot_value_max
+                q := math.floor(equity_lot_value_max / risk)
+                ok := q >= 1
+            else
+                q := base_q
+                ok := true
+    [ok, q]
+
+f_base_eval_py(bool enabled, string d_mv, string h4_mv, string h1_mv, string m15_mv, string m5_mv, bool du_d, bool dd_d, bool du_h4, bool dd_h4, bool du_h1, bool dd_h1, bool du_m15, bool dd_m15, bool du_m5, bool dd_m5, bool use_htf, bool use_tfat, bool use_rat_i, bool use_div_i, bool use_gcr_i, bool use_gcrrng_i, bool use_eor_i) =>
+    string result = "OFF"
+    string core = ""
+    bool m15_ok = false
+    bool m5_ok = false
+    float entry = na
+    if enabled
+        core := d_mv == h4_mv and d_mv == h1_mv ? d_mv : ""
+        if use_htf and core == ""
+            result := "HTFAFM"
+        else
+            if core == ""
+                core := d_mv
+            m15_ok := m15_mv == core
+            m5_ok := m5_mv == core
+            tfat_pass = m15_ok or m5_ok
+            if use_tfat and not tfat_pass
+                result := "TFAT"
+            else
+                rat_reject = use_rat_i and ((core == "Up" and rat_st == "EPR") or (core == "Down" and rat_st == "ENR"))
+                // v57: DIV is handled as a row-level internal waterfall in f_row_py().
+                // Old per-engine p1/p3 DIV is intentionally bypassed to avoid contaminating v44 move logic.
+                div_reject = false
+                vemar_reject = not vemar_pass
+                gcr_reject = use_gcr_i and (core == "Up" ? not gcr_bull : not gcr_bear)
+                gcrrng_reject = use_gcrrng_i and not gcr_rng
+                entry := f_entry_py(core)
+                eor_ok = not use_eor_i or (not na(entry) and entry != 0 and (math.abs(m15_close - entry) / entry <= 0.01 or math.abs(m5_close - entry) / entry <= 0.01))
+                if rat_reject
+                    result := "RAT"
+                else if div_reject
+                    result := "DIV"
+                else if vemar_reject
+                    result := "VEMAR"
+                else if gcr_reject
+                    result := "GCR"
+                else if gcrrng_reject
+                    result := "GCRRNG"
+                else if not eor_ok
+                    result := "EOR"
+                else
+                    result := core == "Up" ? "BUY" : "SELL"
+    [result, core, m15_ok, m5_ok, entry]
+
+f_row_py(bool enabled, string base_result, bool tf_ok, bool div_block, string core, float entry, float tf_h, float tf_l) =>
+    string res = base_result
+    float sl = na
+    float slp = na
+    float q = na
+    if enabled
+        // Preserve v44 higher-priority alignment/RAT results.
+        if base_result == "HTFAFM" or base_result == "TFAT" or base_result == "RAT" or base_result == "OFF"
+            res := base_result
+        else if not tf_ok
+            res := "TFAT"
+        else if div_block
+            // Hard DIV stop: HTFAFM → TFAT → RAT → DIV → GCR → EOR → SLOR.
+            res := "DIV"
+        else if base_result == "BUY" or base_result == "SELL"
+            // tf_l = BUY structure-start LOW anchor; tf_h = SELL structure-start HIGH anchor.
+            // SL uses the safest generated structure-start point: lowest LOW for BUY, highest HIGH for SELL.
+            sl_anchor = core == "Up" ? tf_l : tf_h
+            sl := not na(sl_anchor) ? (core == "Up" ? sl_anchor * 0.995 : sl_anchor * 1.005) : na
+            slp := not na(entry) and not na(sl) and entry != 0 ? math.abs(entry - sl) / entry * 100.0 : na
+            [sl_ok, qty_tmp] = f_slor_qty_py(entry, sl)
+            q := qty_tmp
+            if not sl_ok or na(sl)
+                res := "SLOR"
+        else
+            res := base_result
+    [res, sl, slp, q]
+
+[g_reason, g_core, g_tf15_raw, g_tf5_raw, g_entry] = f_base_eval_py(en_gati, g_d, g_h4, g_h1, g_m15, g_m5, g_d_du, g_d_dd, g_h4_du, g_h4_dd, g_h1_du, g_h1_dd, g_m15_du, g_m15_dd, g_m5_du, g_m5_dd, ga_use_htfafm, ga_use_tfat, ga_use_rat, ga_use_div, ga_use_gcr, ga_use_gcrrng, ga_use_eor)
+[o_reason, o_core, o_tf15_raw, o_tf5_raw, o_entry] = f_base_eval_py(en_ojas, o_d, o_h4, o_h1, o_m15, o_m5, o_d_du, o_d_dd, o_h4_du, o_h4_dd, o_h1_du, o_h1_dd, o_m15_du, o_m15_dd, o_m5_du, o_m5_dd, ojas_use_htfafm, ojas_use_tfat, ojas_use_rat, ojas_use_div, ojas_use_gcr, ojas_use_gcrrng, ojas_use_eor)
+[a_reason, a_core, a_tf15_raw, a_tf5_raw, a_entry] = f_base_eval_py(en_akriti, a_d, a_h4, a_h1, a_m15, a_m5, a_d_du, a_d_dd, a_h4_du, a_h4_dd, a_h1_du, a_h1_dd, a_m15_du, a_m15_dd, a_m5_du, a_m5_dd, ak_use_htfafm, ak_use_tfat, ak_use_rat, ak_use_div, ak_use_gcr, ak_use_gcrrng, ak_use_eor)
+
+// Row-level internal DIV waterfall.
+// 15M trades: D → 4H → 1H → 15M.
+// 5M trades : D → 4H → 1H → 5M.
+// BUY blocked by active negative DIV. SELL blocked by active positive DIV.
+f_div_block_15(string core, bool use_div_i) =>
+    use_div_i and (core == "Up" ? (div_d_neg or div_h4_neg or div_h1_neg or div_m15_neg) : core == "Down" ? (div_d_pos or div_h4_pos or div_h1_pos or div_m15_pos) : false)
+
+f_div_block_5(string core, bool use_div_i) =>
+    use_div_i and (core == "Up" ? (div_d_neg or div_h4_neg or div_h1_neg or div_m5_neg) : core == "Down" ? (div_d_pos or div_h4_pos or div_h1_pos or div_m5_pos) : false)
+
+g_div15 = f_div_block_15(g_core, ga_use_div)
+g_div5  = f_div_block_5(g_core, ga_use_div)
+o_div15 = f_div_block_15(o_core, ojas_use_div)
+o_div5  = f_div_block_5(o_core, ojas_use_div)
+a_div15 = f_div_block_15(a_core, ak_use_div)
+a_div5  = f_div_block_5(a_core, ak_use_div)
+
+[g_res15, g_sl15, g_slp15, g_qty15] = f_row_py(en_gati, g_reason, g_tf15_raw, g_div15, g_core, g_entry, g_m15_h, g_m15_l)
+[g_res5,  g_sl5,  g_slp5,  g_qty5]  = f_row_py(en_gati, g_reason, g_tf5_raw,  g_div5,  g_core, g_entry, g_m5_h,  g_m5_l)
+[o_res15, o_sl15, o_slp15, o_qty15] = f_row_py(en_ojas, o_reason, o_tf15_raw, o_div15, o_core, o_entry, o_m15_h, o_m15_l)
+[o_res5,  o_sl5,  o_slp5,  o_qty5]  = f_row_py(en_ojas, o_reason, o_tf5_raw,  o_div5,  o_core, o_entry, o_m5_h,  o_m5_l)
+[a_res15, a_sl15, a_slp15, a_qty15] = f_row_py(en_akriti, a_reason, a_tf15_raw, a_div15, a_core, a_entry, a_m15_h, a_m15_l)
+[a_res5,  a_sl5,  a_slp5,  a_qty5]  = f_row_py(en_akriti, a_reason, a_tf5_raw,  a_div5,  a_core, a_entry, a_m5_h,  a_m5_l)
+
+// Legacy aliases retained for Sangam plotting/dashboard compatibility.
+g_act15 = g_res15
+g_act5 = g_res5
+o_act15 = o_res15
+o_act5 = o_res5
+a_act15 = a_res15
+a_act5 = a_res5
+
+// ===================== ZIGZAGS =====================
+cur_lb = timeframe.isdaily ? lookback_d : timeframe.multiplier == 240 ? lookback_h4 : timeframe.multiplier == 60 ? lookback_h1 : timeframe.multiplier == 15 ? lookback_m15 : lookback_m5
+cur_f  = timeframe.isdaily ? d_f : timeframe.multiplier == 240 ? h4_f : timeframe.multiplier == 60 ? h1_f : timeframe.multiplier == 15 ? m15_f : m5_f
+cur_mult = timeframe.isdaily ? d_mult : timeframe.multiplier == 240 ? h4_mult : timeframe.multiplier == 60 ? h1_mult : timeframe.multiplier == 15 ? m15_mult : m5_mult
+[g_cur_dir, g_cur_hi_idx, g_cur_lo_idx, g_cur_hi_val, g_cur_lo_val, g_cur_rd] = f_calc_move(cur_mult)
+
+seed_len_cur = math.max(1, int(math.round(cur_lb * seed_pct / 100.0)))
+var line[] o_zzLines = array.new_line()
+var label[] o_ptLabels = array.new_label()
+
+o_clear_lines() =>
+    n = array.size(o_zzLines)
+    if n > 0
+        for i = 0 to n - 1
+            line.delete(array.get(o_zzLines, i))
+    array.clear(o_zzLines)
+
+o_clear_labels() =>
+    n = array.size(o_ptLabels)
+    if n > 0
+        for i = 0 to n - 1
+            label.delete(array.get(o_ptLabels, i))
+    array.clear(o_ptLabels)
+
+if show_zz_ojas and en_ojas and barstate.islast and bar_index >= 3
+    o_clear_lines()
+    o_clear_labels()
+
+    float sh = na
+    float sl = na
+    int shx = na
+    int slx = na
+    for i = cur_lb - seed_len_cur to cur_lb - 1
+        if na(sh) or high[i] > sh
+            sh := high[i]
+            shx := bar_index - i
+        if na(sl) or low[i] < sl
+            sl := low[i]
+            slx := bar_index - i
+
+    float p0 = shx <= slx ? sh : sl
+    int p0x = shx <= slx ? shx : slx
+    int p0t = shx <= slx ? 1 : -1
+    float p1 = shx <= slx ? sl : sh
+    int p1x = shx <= slx ? slx : shx
+    int p1t = shx <= slx ? -1 : 1
+
+    float[] py = array.new_float()
+    int[] px = array.new_int()
+    int[] pt = array.new_int()
+    array.push(py, p0), array.push(px, p0x), array.push(pt, p0t)
+    array.push(py, p1), array.push(px, p1x), array.push(pt, p1t)
+
+    float lastConfirmedTop = p0t == 1 ? p0 : p1t == 1 ? p1 : na
+    float lastConfirmedBottom = p0t == -1 ? p0 : p1t == -1 ? p1 : na
+
+    int oppRun = 0
+    int oppGoodStreak = 0
+    int barsFromExtreme = 0
+    scan_from_cur = math.max(0, cur_lb - seed_len_cur - 1)
+
+    for off = scan_from_cur to 0
+        xCur = bar_index - off
+        hCur = high[off]
+        lCur = low[off]
+        sz = array.size(px)
+        curX = array.get(px, sz - 1)
+        curY = array.get(py, sz - 1)
+        curT = array.get(pt, sz - 1)
+
+        if xCur > curX
+            if curT == 1
+                if hCur > curY
+                    array.set(py, sz - 1, hCur)
+                    array.set(px, sz - 1, xCur)
+                    oppRun := 0
+                    oppGoodStreak := 0
+                    barsFromExtreme := 0
+                else
+                    barsFromExtreme += 1
+                    isOpp = close[off] < open[off]
+                    if isOpp
+                        oppRun += 1
+                        oppGoodStreak := bear_good(off) ? oppGoodStreak + 1 : 0
+                    else
+                        oppRun := 0
+                        oppGoodStreak := 0
+                    // Ojas rule: reverse when either structure breaks OR 2 consecutive opposite good candles confirm.
+                    brokeStructure = not na(lastConfirmedBottom) and lCur < lastConfirmedBottom
+                    strictOpp = barsFromExtreme <= 3 and oppRun >= 3 and oppGoodStreak >= 3
+                    reversalOk = brokeStructure or strictOpp
+                    if reversalOk
+                        lastConfirmedTop := curY
+                        array.push(py, lCur), array.push(px, xCur), array.push(pt, -1)
+                        oppRun := 0
+                        oppGoodStreak := 0
+            else
+                if lCur < curY
+                    array.set(py, sz - 1, lCur)
+                    array.set(px, sz - 1, xCur)
+                    oppRun := 0
+                    oppGoodStreak := 0
+                    barsFromExtreme := 0
+                else
+                    barsFromExtreme += 1
+                    isOpp = close[off] > open[off]
+                    if isOpp
+                        oppRun += 1
+                        oppGoodStreak := bull_good(off) ? oppGoodStreak + 1 : 0
+                    else
+                        oppRun := 0
+                        oppGoodStreak := 0
+                    // Ojas rule: reverse when either structure breaks OR 2 consecutive opposite good candles confirm.
+                    brokeStructure = not na(lastConfirmedTop) and hCur > lastConfirmedTop
+                    strictOpp = barsFromExtreme <= 3 and oppRun >= 3 and oppGoodStreak >= 3
+                    reversalOk = brokeStructure or strictOpp
+                    if reversalOk
+                        lastConfirmedBottom := curY
+                        array.push(py, hCur), array.push(px, xCur), array.push(pt, 1)
+                        oppRun := 0
+                        oppGoodStreak := 0
+
+    npts = array.size(px)
+    o_plot_start = math.max(0, npts - plot_max_points)
+    if npts - o_plot_start >= 2
+        for i = o_plot_start + 1 to npts - 1
+            xA = array.get(px, i - 1)
+            yA = array.get(py, i - 1)
+            xB = array.get(px, i)
+            yB = array.get(py, i)
+            l = line.new(xA, yA, xB, yB, xloc=xloc.bar_index, color=color.orange, width=2)
+            array.push(o_zzLines, l)
+
+    if npts > 0
+        for i = o_plot_start to npts - 1
+            xt = array.get(px, i)
+            yt = array.get(py, i)
+            tt = array.get(pt, i)
+            txt = tt == 1 ? "OT" : "OB"
+            st = tt == 1 ? label.style_label_down : label.style_label_up
+            lb = label.new(xt, yt, txt, xloc=xloc.bar_index, style=st, textcolor=color.white, color=color.new(color.orange, 0))
+            array.push(o_ptLabels, lb)
+
+
+
+
+// Akriti (RECTIFIED plotting: aligned with alternating pivot logic + bounded memory)
+var line[] a_zzLines = array.new_line()
+var label[] a_zzLabels = array.new_label()
+var float a_lastPv = na
+var int a_lastPx = na
+var int a_lastPt = 0
+var float a_lastAH = na
+var int a_lastAHx = na
+var float a_lastAL = na
+var int a_lastALx = na
+var int a_ptNum = 0
+var label a_liveLbl = na
+
+a_clear_lines() =>
+    n = array.size(a_zzLines)
+    if n > 0
+        for i = 0 to n - 1
+            line.delete(array.get(a_zzLines, i))
+    array.clear(a_zzLines)
+
+a_clear_labels() =>
+    n = array.size(a_zzLabels)
+    if n > 0
+        for i = 0 to n - 1
+            label.delete(array.get(a_zzLabels, i))
+    array.clear(a_zzLabels)
+
+// Reinstated Akriti colored plotting persistence:
+// clear only when Akriti plotting is disabled, not every last bar.
+if (not show_zz_akriti or not en_akriti) and barstate.islast
+    a_clear_lines()
+    a_clear_labels()
+    a_lastPv := na
+    a_lastPx := na
+    a_lastPt := 0
+    a_lastAH := na
+    a_lastAHx := na
+    a_lastAL := na
+    a_lastALx := na
+    a_ptNum := 0
+    a_liveLbl := na
+
+ph_a = ta.pivothigh(high, cur_f, cur_f)
+pl_a = ta.pivotlow(low, cur_f, cur_f)
+
+if show_zz_akriti and en_akriti
+    phx = bar_index[cur_f]
+    plx = bar_index[cur_f]
+    lb_start = last_bar_index - cur_lb
+
+    // Keep Akriti plotting strictly inside lookback window.
+    if not na(a_lastPx) and a_lastPx < lb_start
+        a_clear_lines()
+        a_clear_labels()
+        a_lastPv := na
+        a_lastPx := na
+        a_lastPt := 0
+        a_lastAH := na
+        a_lastAHx := na
+        a_lastAL := na
+        a_lastALx := na
+        a_ptNum := 0
+        a_liveLbl := na
+
+    // Bootstrap first Akriti pivot so plotting doesn't remain absent.
+    if na(a_lastPv) or na(a_lastPx)
+        if not na(ph_a) and not na(phx) and phx >= lb_start and (na(pl_a) or phx >= plx)
+            a_lastPv := ph_a
+            a_lastPx := phx
+            a_lastPt := 1
+            a_lastAH := ph_a
+            a_lastAHx := phx
+            a_ptNum += 1
+            lb = label.new(phx, ph_a, "AT", xloc=xloc.bar_index, style=label.style_label_down, color=color.new(color.aqua, 0), textcolor=color.white)
+            array.push(a_zzLabels, lb)
+            a_liveLbl := lb
+        else if not na(pl_a) and not na(plx) and plx >= lb_start
+            a_lastPv := pl_a
+            a_lastPx := plx
+            a_lastPt := -1
+            a_lastAL := pl_a
+            a_lastALx := plx
+            a_ptNum += 1
+            lb = label.new(plx, pl_a, "AB", xloc=xloc.bar_index, style=label.style_label_up, color=color.new(color.aqua, 0), textcolor=color.white)
+            array.push(a_zzLabels, lb)
+            a_liveLbl := lb
+    else
+        if not na(ph_a) and not na(phx)
+            if a_lastPt == 1
+                if ph_a > a_lastPv and phx >= a_lastPx
+                    a_lastPv := ph_a
+                    a_lastPx := phx
+                    a_lastAH := ph_a
+                    a_lastAHx := phx
+                    lnCount = array.size(a_zzLines)
+                    if lnCount > 0
+                        lastLn = array.get(a_zzLines, lnCount - 1)
+                        line.set_xy2(lastLn, phx, ph_a)
+                    if not na(a_liveLbl)
+                        label.set_xy(a_liveLbl, phx, ph_a)
+            else
+                if phx > a_lastPx and phx >= lb_start
+                    ln = line.new(a_lastPx, a_lastPv, phx, ph_a, color=color.aqua, width=2)
+                    array.push(a_zzLines, ln)
+                    a_ptNum += 1
+                    lb = label.new(phx, ph_a, "AT", xloc=xloc.bar_index, style=label.style_label_down, color=color.new(color.aqua, 0), textcolor=color.white)
+                    array.push(a_zzLabels, lb)
+                    a_liveLbl := lb
+                    a_lastPv := ph_a
+                    a_lastPx := phx
+                    a_lastPt := 1
+                    a_lastAH := ph_a
+                    a_lastAHx := phx
+
+        if not na(pl_a) and not na(plx)
+            if a_lastPt == -1
+                if pl_a < a_lastPv and plx >= a_lastPx
+                    a_lastPv := pl_a
+                    a_lastPx := plx
+                    a_lastAL := pl_a
+                    a_lastALx := plx
+                    lnCount = array.size(a_zzLines)
+                    if lnCount > 0
+                        lastLn = array.get(a_zzLines, lnCount - 1)
+                        line.set_xy2(lastLn, plx, pl_a)
+                    if not na(a_liveLbl)
+                        label.set_xy(a_liveLbl, plx, pl_a)
+            else
+                if plx > a_lastPx and plx >= lb_start
+                    ln = line.new(a_lastPx, a_lastPv, plx, pl_a, color=color.aqua, width=2)
+                    array.push(a_zzLines, ln)
+                    a_ptNum += 1
+                    lb = label.new(plx, pl_a, "AB", xloc=xloc.bar_index, style=label.style_label_up, color=color.new(color.aqua, 0), textcolor=color.white)
+                    array.push(a_zzLabels, lb)
+                    a_liveLbl := lb
+                    a_lastPv := pl_a
+                    a_lastPx := plx
+                    a_lastPt := -1
+                    a_lastAL := pl_a
+                    a_lastALx := plx
+
+    // Structure-break branch:
+    // If previous AL breaks while latest pivot is AH -> draw AH -> new AL branch.
+    if a_lastPt == 1 and not na(a_lastAL) and low < a_lastAL and bar_index >= lb_start
+        if not na(a_lastPv) and not na(a_lastPx) and bar_index > a_lastPx
+            ln = line.new(a_lastPx, a_lastPv, bar_index, low, color=color.aqua, width=2)
+            array.push(a_zzLines, ln)
+        a_ptNum += 1
+        lb = label.new(bar_index, low, "AB", xloc=xloc.bar_index, style=label.style_label_up, color=color.new(color.aqua, 0), textcolor=color.white)
+        array.push(a_zzLabels, lb)
+        a_liveLbl := lb
+        a_lastPv := low
+        a_lastPx := bar_index
+        a_lastPt := -1
+        a_lastAL := low
+        a_lastALx := bar_index
+
+    // Symmetric branch:
+    // If previous AH breaks while latest pivot is AL -> draw AL -> new AH branch.
+    if a_lastPt == -1 and not na(a_lastAH) and high > a_lastAH and bar_index >= lb_start
+        if not na(a_lastPv) and not na(a_lastPx) and bar_index > a_lastPx
+            ln = line.new(a_lastPx, a_lastPv, bar_index, high, color=color.aqua, width=2)
+            array.push(a_zzLines, ln)
+        a_ptNum += 1
+        lb = label.new(bar_index, high, "AT", xloc=xloc.bar_index, style=label.style_label_down, color=color.new(color.aqua, 0), textcolor=color.white)
+        array.push(a_zzLabels, lb)
+        a_liveLbl := lb
+        a_lastPv := high
+        a_lastPx := bar_index
+        a_lastPt := 1
+        a_lastAH := high
+        a_lastAHx := bar_index
+
+    // Intraleg extreme tracking so Akriti line touches true tops/lows, not just confirmed fractals.
+    if a_lastPt == 1 and high > a_lastPv and bar_index > a_lastPx
+        a_lastPv := high
+        a_lastPx := bar_index
+        a_lastAH := high
+        a_lastAHx := bar_index
+        lnCount = array.size(a_zzLines)
+        if lnCount > 0
+            lastLn = array.get(a_zzLines, lnCount - 1)
+            line.set_xy2(lastLn, bar_index, high)
+        if not na(a_liveLbl)
+            label.set_xy(a_liveLbl, bar_index, high)
+
+    if a_lastPt == -1 and low < a_lastPv and bar_index > a_lastPx
+        a_lastPv := low
+        a_lastPx := bar_index
+        a_lastAL := low
+        a_lastALx := bar_index
+        lnCount = array.size(a_zzLines)
+        if lnCount > 0
+            lastLn = array.get(a_zzLines, lnCount - 1)
+            line.set_xy2(lastLn, bar_index, low)
+        if not na(a_liveLbl)
+            label.set_xy(a_liveLbl, bar_index, low)
+
+// Keep Akriti visual objects capped to latest plot_max_points.
+if barstate.islast
+    while array.size(a_zzLabels) > plot_max_points
+        label.delete(array.shift(a_zzLabels))
+    while array.size(a_zzLines) > math.max(1, plot_max_points - 1)
+        line.delete(array.shift(a_zzLines))
+
+// ===================== GATI PLOTTING REPLACEMENT (REPLACE ENTIRE BLOCK) =====================
+var line[] g_lines = array.new_line()
+var label[] g_labels = array.new_label()
+
+g_clear_lines() =>
+    n = array.size(g_lines)
+    if n > 0
+        for i = 0 to n - 1
+            line.delete(array.get(g_lines, i))
+    array.clear(g_lines)
+
+g_clear_labels() =>
+    n = array.size(g_labels)
+    if n > 0
+        for i = 0 to n - 1
+            label.delete(array.get(g_labels, i))
+    array.clear(g_labels)
+
+if (not show_zz_gati or not en_gati) and barstate.islast
+    g_clear_lines()
+    g_clear_labels()
+
+if show_zz_gati and en_gati and barstate.islast and bar_index >= 2
+    g_clear_lines()
+    g_clear_labels()
+
+    lb_eff = math.max(3, math.min(cur_lb, bar_index + 1))
+    lb_start_idx = bar_index - lb_eff + 1
+    rev = na(g_cur_rd) or g_cur_rd <= 0 ? ta.atr(14) : g_cur_rd
+
+    float[] zzY = array.new_float()
+    int[] zzX = array.new_int()
+    int[] zzT = array.new_int()
+
+    // Seed from the first bar of the active lookback window.
+    p_idx = lb_start_idx
+    p_val = close[bar_index - p_idx]
+    p_type = 0
+
+    for x = lb_start_idx + 1 to bar_index
+        off = bar_index - x
+        h = high[off]
+        l = low[off]
+
+        if p_type == 0
+            if h - p_val >= rev
+                p_type := 1
+                p_val := h
+                p_idx := x
+                array.push(zzY, p_val), array.push(zzX, p_idx), array.push(zzT, 1)
+            else if p_val - l >= rev
+                p_type := -1
+                p_val := l
+                p_idx := x
+                array.push(zzY, p_val), array.push(zzX, p_idx), array.push(zzT, -1)
+        else if p_type == 1
+            if h >= p_val
+                p_val := h
+                p_idx := x
+                if array.size(zzY) > 0 and array.get(zzT, array.size(zzT) - 1) == 1
+                    array.set(zzY, array.size(zzY) - 1, p_val)
+                    array.set(zzX, array.size(zzX) - 1, p_idx)
+            else if p_val - l >= rev
+                p_type := -1
+                p_val := l
+                p_idx := x
+                array.push(zzY, p_val), array.push(zzX, p_idx), array.push(zzT, -1)
+        else
+            if l <= p_val
+                p_val := l
+                p_idx := x
+                if array.size(zzY) > 0 and array.get(zzT, array.size(zzT) - 1) == -1
+                    array.set(zzY, array.size(zzY) - 1, p_val)
+                    array.set(zzX, array.size(zzX) - 1, p_idx)
+            else if h - p_val >= rev
+                p_type := 1
+                p_val := h
+                p_idx := x
+                array.push(zzY, p_val), array.push(zzX, p_idx), array.push(zzT, 1)
+
+    // Use local lookback extremes for plotting coordinates so lines never become forward-looking.
+    // (Do not trust cross-context indices here.)
+    hi_off_fb = ta.highestbars(high, lb_eff)
+    lo_off_fb = ta.lowestbars(low, lb_eff)
+    hi_idx = bar_index - hi_off_fb
+    lo_idx = bar_index - lo_off_fb
+    hi_val = ta.highest(high, lb_eff)
+    lo_val = ta.lowest(low, lb_eff)
+
+    // Hard clamp to current lookback window and current bar.
+    hi_idx := math.max(lb_start_idx, math.min(hi_idx, bar_index))
+    lo_idx := math.max(lb_start_idx, math.min(lo_idx, bar_index))
+
+
+    // Always draw the selected lookback low<->high connector first.
+    // This prevents blank states even when pivot development is partial/noisy.
+    base_drawn = false
+    if hi_idx != lo_idx
+        x1b = hi_idx < lo_idx ? hi_idx : lo_idx
+        y1b = hi_idx < lo_idx ? hi_val : lo_val
+        x2b = hi_idx < lo_idx ? lo_idx : hi_idx
+        y2b = hi_idx < lo_idx ? lo_val : hi_val
+        ln_base = line.new(x1b, y1b, x2b, y2b, xloc=xloc.bar_index, color=color.fuchsia, width=2)
+        array.push(g_lines, ln_base)
+        if array.size(zzX) < 2
+            lb1 = label.new(x1b, y1b, hi_idx < lo_idx ? "GT" : "GB", xloc=xloc.bar_index, style=hi_idx < lo_idx ? label.style_label_down : label.style_label_up, textcolor=color.white, color=color.new(color.fuchsia, 0), size=size.tiny)
+            lb2 = label.new(x2b, y2b, hi_idx < lo_idx ? "GB" : "GT", xloc=xloc.bar_index, style=hi_idx < lo_idx ? label.style_label_up : label.style_label_down, textcolor=color.white, color=color.new(color.fuchsia, 0), size=size.tiny)
+            array.push(g_labels, lb1)
+            array.push(g_labels, lb2)
+        base_drawn := true
+
+    // If pivot path is weak/absent, keep only the base connector and skip extra legs.
+    nzz = array.size(zzX)
+    if nzz >= 2
+        // Draw detected zigzag legs, capped to latest plot_max_points.
+        g_plot_start = math.max(0, nzz - plot_max_points)
+        for i = g_plot_start + 1 to nzz - 1
+            x1 = array.get(zzX, i - 1)
+            y1 = array.get(zzY, i - 1)
+            t1 = array.get(zzT, i - 1)
+            x2 = array.get(zzX, i)
+            y2 = array.get(zzY, i)
+            t2 = array.get(zzT, i)
+            if t1 != t2 and x2 > x1
+                ln = line.new(x1, y1, x2, y2, xloc=xloc.bar_index, color=color.fuchsia, width=2)
+                array.push(g_lines, ln)
+
+        // Mark detected Gati ATR pivot points.
+        for i = g_plot_start to nzz - 1
+            xg = array.get(zzX, i)
+            yg = array.get(zzY, i)
+            tg = array.get(zzT, i)
+            gtxt = tg == 1 ? "GT" : "GB"
+            gst = tg == 1 ? label.style_label_down : label.style_label_up
+            glb = label.new(xg, yg, gtxt, xloc=xloc.bar_index, style=gst, textcolor=color.white, color=color.new(color.fuchsia, 0), size=size.tiny)
+            array.push(g_labels, glb)
+
+        // Ensure both absolute lookback extremes are represented.
+        has_hi = false
+        has_lo = false
+        for i = 0 to nzz - 1
+            if array.get(zzX, i) == hi_idx
+                has_hi := true
+            if array.get(zzX, i) == lo_idx
+                has_lo := true
+
+        if not has_hi or not has_lo
+            x1 = hi_idx < lo_idx ? hi_idx : lo_idx
+            y1 = hi_idx < lo_idx ? hi_val : lo_val
+            x2 = hi_idx < lo_idx ? lo_idx : hi_idx
+            y2 = hi_idx < lo_idx ? lo_val : hi_val
+            ln_ext = line.new(x1, y1, x2, y2, xloc=xloc.bar_index, color=color.fuchsia, width=2)
+            array.push(g_lines, ln_ext)
+
+
+    // Keep Gati visual lines/labels capped.
+    while array.size(g_lines) > math.max(1, plot_max_points - 1)
+        line.delete(array.shift(g_lines))
+    while array.size(g_labels) > plot_max_points
+        label.delete(array.shift(g_labels))
+
+// ===================== DASHBOARD =====================
+f_strategy_color(nm) =>
+    nm == "Ojas" ? color.orange : nm == "Akriti" ? color.aqua : color.fuchsia
+
+var table dash = table.new(position.top_center, 32, 3, border_width=1)
+
+hdr(c0) =>
+    table.cell(dash, c0 + 0, 0, "Strategy", bgcolor=color.black, text_color=color.white)
+    table.cell(dash, c0 + 1, 0, "TF", bgcolor=color.black, text_color=color.white)
+    table.cell(dash, c0 + 2, 0, "Result", bgcolor=color.black, text_color=color.white)
+    table.cell(dash, c0 + 3, 0, "Entry", bgcolor=color.black, text_color=color.white)
+    table.cell(dash, c0 + 4, 0, "SL", bgcolor=color.black, text_color=color.white)
+    table.cell(dash, c0 + 5, 0, "SL%", bgcolor=color.black, text_color=color.white)
+    table.cell(dash, c0 + 6, 0, "Qty/Lots", bgcolor=color.black, text_color=color.white)
+
+f_result_bg(res) =>
+    res == "BUY" ? color.blue : res == "SELL" ? color.red : res == "SLOR" ? color.rgb(255, 204, 128) : res == "OFF" ? color.new(color.gray, 50) : color.yellow
+
+f_result_txt(res) =>
+    res == "BUY" or res == "SELL" ? color.white : color.black
+
+row(c0, r, nm, tf, res, ent, sl, slp, qty) =>
+    sclr = f_strategy_color(nm)
+    show_levels = res == "BUY" or res == "SELL"
+    ent_txt = show_levels and not na(ent) ? str.tostring(ent, "#.#") : "-"
+    sl_txt = show_levels and not na(sl) ? str.tostring(sl, "#.#") : "-"
+    slp_txt = show_levels and not na(slp) ? str.tostring(slp, "#.##") + "%" : "-"
+    qty_txt = show_levels and not na(qty) ? str.tostring(qty, "#") : "-"
+
+    // Trade-level colours for fast reading:
+    // BUY  : Entry blue, SL pink.
+    // SELL : Entry pink, SL blue.
+    is_buy_side = res == "BUY"
+    is_sell_side = res == "SELL"
+    nil_bg = color.rgb(220, 220, 220)
+    entry_bg = is_buy_side ? color.new(color.blue, 0) : is_sell_side ? color.new(color.fuchsia, 0) : nil_bg
+    sl_bg    = is_buy_side ? color.new(color.fuchsia, 0) : is_sell_side ? color.new(color.blue, 0) : nil_bg
+    info_bg  = show_levels ? color.rgb(95, 95, 105) : nil_bg
+    qty_bg   = show_levels ? color.rgb(255, 204, 128) : nil_bg
+    level_txt_col = show_levels ? color.white : color.black
+    qty_txt_col = show_levels ? color.black : color.black
+
+    table.cell(dash, c0 + 0, r, nm, bgcolor=color.new(sclr, 70), text_color=color.white)
+    table.cell(dash, c0 + 1, r, tf, bgcolor=color.black, text_color=color.white)
+    table.cell(dash, c0 + 2, r, res, bgcolor=f_result_bg(res), text_color=f_result_txt(res))
+    table.cell(dash, c0 + 3, r, ent_txt, bgcolor=entry_bg, text_color=level_txt_col)
+    table.cell(dash, c0 + 4, r, sl_txt, bgcolor=sl_bg, text_color=level_txt_col)
+    table.cell(dash, c0 + 5, r, slp_txt, bgcolor=info_bg, text_color=level_txt_col)
+    table.cell(dash, c0 + 6, r, qty_txt, bgcolor=qty_bg, text_color=qty_txt_col)
+
+if barstate.islast
+    table.clear(dash, 0, 0, 31, 2)
+
+    hdr(0)
+    row(0, 1, "Gati", "15m", g_res15, g_entry, g_sl15, g_slp15, g_qty15)
+    row(0, 2, "Gati", "5m", g_res5, g_entry, g_sl5, g_slp5, g_qty5)
+
+    table.cell(dash, 7, 0, "", bgcolor=color.new(color.black, 100))
+    table.cell(dash, 7, 1, "", bgcolor=color.new(color.black, 100))
+    table.cell(dash, 7, 2, "", bgcolor=color.new(color.black, 100))
+
+    hdr(8)
+    row(8, 1, "Ojas", "15m", o_res15, o_entry, o_sl15, o_slp15, o_qty15)
+    row(8, 2, "Ojas", "5m", o_res5, o_entry, o_sl5, o_slp5, o_qty5)
+
+    table.cell(dash, 15, 0, "", bgcolor=color.new(color.black, 100))
+    table.cell(dash, 15, 1, "", bgcolor=color.new(color.black, 100))
+    table.cell(dash, 15, 2, "", bgcolor=color.new(color.black, 100))
+
+    hdr(16)
+    row(16, 1, "Akriti", "15m", a_res15, a_entry, a_sl15, a_slp15, a_qty15)
+    row(16, 2, "Akriti", "5m", a_res5, a_entry, a_sl5, a_slp5, a_qty5)
+
+f_cur_fractal() =>
+    timeframe.isdaily ? d_f : timeframe.multiplier == 240 ? h4_f : timeframe.multiplier == 60 ? h1_f : timeframe.multiplier == 15 ? m15_f : m5_f
+
+f_cur_mult() =>
+    timeframe.isdaily ? d_mult : timeframe.multiplier == 240 ? h4_mult : timeframe.multiplier == 60 ? h1_mult : timeframe.multiplier == 15 ? m15_mult : m5_mult
+
+f_substrategy_ref_text() =>
+    atr_pct = close != 0 ? (ta.atr(14) / close * 100.0) : na
+    gati_txt = "Gati ATR%=" + str.tostring(atr_pct, "#.##") + " | Mult=" + str.tostring(f_cur_mult(), "#.##")
+    akriti_txt = "Akriti Fractal=" + str.tostring(f_cur_fractal())
+    status_txt = "[G:" + (en_gati ? "ON" : "OFF") + " O:" + (en_ojas ? "ON" : "OFF") + " A:" + (en_akriti ? "ON" : "OFF") + "]"
+    status_txt + "\n" + gati_txt + "\n" + akriti_txt
+
+var line lb_marker = na
+var label lb_label = na
+
+if barstate.islast
+    lookback_x = math.max(0, bar_index - cur_lb + 1)
+    y_top = ta.highest(high, cur_lb)
+    y_bot = ta.lowest(low, cur_lb)
+
+    // Restored exactly as requested:
+    // blue dotted, width 4, extended both ways
+    if not na(lb_marker)
+        line.delete(lb_marker)
+    lb_marker := line.new(
+         lookback_x, y_top,
+         lookback_x, y_bot,
+         xloc=xloc.bar_index,
+         style=line.style_dotted,
+         color=color.blue,
+         width=4,
+         extend=extend.both)
+
+    if not na(lb_label)
+        label.delete(lb_label)
+
+    lb_text = "TF: " + timeframe.period + "\nLB: " + str.tostring(cur_lb)
+    lb_label := label.new(
+         lookback_x,
+         y_top,
+         lb_text,
+         xloc=xloc.bar_index,
+         style=label.style_label_down,
+         color=color.new(color.blue, 0),
+         textcolor=color.white)
